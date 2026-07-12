@@ -4,7 +4,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Room, RoomMembership
@@ -23,8 +23,9 @@ from .serializers import (
         summary='방 목록 조회',
         description=(
             '전체 방 목록을 최신순으로 조회합니다.\n\n'
-            '- 로그인 필요\n'
-            '- 각 방에 `approved_member_count`, `my_membership_status`가 포함됩니다.'
+            '- **비로그인 가능**\n'
+            '- 로그인 시 각 방에 `my_membership_status`가 포함됩니다.\n'
+            '- 비로그인 시 `my_membership_status`는 null입니다.'
         ),
         responses={200: RoomSerializer(many=True)},
     ),
@@ -78,17 +79,36 @@ from .serializers import (
         summary='가입 신청 목록 (방장)',
         description=(
             '해당 방의 **대기(pending)** 신청 목록을 조회합니다.\n\n'
-            '- 방장만 호출 가능'
+            '- 방장만 호출 가능\n'
+            '- 채팅방 우측 패널의 신청자 목록에 사용'
         ),
         responses={
             200: RoomMembershipSerializer(many=True),
             403: OpenApiResponse(description='방장이 아님'),
         },
     ),
+    members=extend_schema(
+        tags=['rooms'],
+        summary='참여 중 멤버 목록',
+        description=(
+            '해당 방의 **승인(approved)** 멤버 목록을 조회합니다.\n\n'
+            '- 승인된 방 멤버만 호출 가능\n'
+            '- 채팅방 우측 패널(방장·비방장 공통)에 사용'
+        ),
+        responses={
+            200: RoomMembershipSerializer(many=True),
+            403: OpenApiResponse(description='승인된 방 멤버가 아님'),
+        },
+    ),
 )
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         return rooms_with_counts()
@@ -118,7 +138,7 @@ class RoomViewSet(viewsets.ModelViewSet):
                 )
                 .values_list('id', flat=True)
             )
-        elif self.action == 'retrieve':
+        elif self.action in ('retrieve', 'members', 'applications', 'apply'):
             room_ids = [self.kwargs['pk']]
 
         if room_ids:
@@ -189,6 +209,24 @@ class RoomViewSet(viewsets.ModelViewSet):
         qs = room.memberships.filter(
             status=RoomMembership.Status.PENDING,
         ).select_related('user')
+        return Response(RoomMembershipSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=['get'])
+    def members(self, request, pk=None):
+        room = self.get_object()
+        is_member = RoomMembership.objects.filter(
+            room=room,
+            user=request.user,
+            status=RoomMembership.Status.APPROVED,
+        ).exists()
+        if not is_member:
+            raise PermissionDenied('승인된 방 멤버만 멤버 목록을 볼 수 있습니다.')
+
+        qs = (
+            room.memberships.filter(status=RoomMembership.Status.APPROVED)
+            .select_related('user')
+            .order_by('created_at')
+        )
         return Response(RoomMembershipSerializer(qs, many=True).data)
 
 
