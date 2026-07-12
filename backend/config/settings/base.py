@@ -145,3 +145,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # 목업/시드 데이터 — development에서만 True로 덮어씀
 SEED_MOCK_DATA = False
+
+# 카카오 OAuth (로컬 Redirect URI 예: http://localhost:5173/auth/kakao/callback)
+KAKAO_REST_API_KEY = os.getenv('KAKAO_REST_API_KEY', '')
+KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
+KAKAO_REDIRECT_URI = os.getenv(
+    'KAKAO_REDIRECT_URI',
+    'http://localhost:5173/auth/kakao/callback',
+)
