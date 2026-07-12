@@ -6,5 +6,4 @@ staticfiles/
 mediafiles/
 *.sqlite3
 .Python
-
-    
+scripts/*
