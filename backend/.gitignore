@@ -1,1 +1,10 @@
-env/*
+env/
+.env
+__pycache__/
+*.py[cod]
+staticfiles/
+mediafiles/
+*.sqlite3
+.Python
+
+    
