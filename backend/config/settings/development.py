@@ -10,6 +10,13 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',  # noqa: F405
+    }
+}
+
 # 로컬에서 CORS를 느슨하게 둘 때 (프론트 포트가 자주 바뀔 경우)
 # CORS_ALLOW_ALL_ORIGINS = True
 
