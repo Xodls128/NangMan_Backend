@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -18,12 +18,73 @@ from .serializers import (
 
 
 @extend_schema_view(
-    list=extend_schema(tags=['rooms']),
-    retrieve=extend_schema(tags=['rooms']),
-    create=extend_schema(tags=['rooms']),
-    mine=extend_schema(tags=['rooms']),
-    apply=extend_schema(tags=['rooms']),
-    applications=extend_schema(tags=['rooms']),
+    list=extend_schema(
+        tags=['rooms'],
+        summary='방 목록 조회',
+        description=(
+            '전체 방 목록을 최신순으로 조회합니다.\n\n'
+            '- 로그인 필요\n'
+            '- 각 방에 `approved_member_count`, `my_membership_status`가 포함됩니다.'
+        ),
+        responses={200: RoomSerializer(many=True)},
+    ),
+    retrieve=extend_schema(
+        tags=['rooms'],
+        summary='방 상세 조회',
+        description='단일 방의 상세 정보와 내 멤버십 상태를 조회합니다.',
+        responses={
+            200: RoomSerializer,
+            404: OpenApiResponse(description='방이 존재하지 않음'),
+        },
+    ),
+    create=extend_schema(
+        tags=['rooms'],
+        summary='방 생성',
+        description=(
+            '새 방을 생성합니다. 생성한 유저가 방장이 됩니다.\n\n'
+            '- 생성과 동시에 방장은 `approved` 멤버로 등록됩니다.\n'
+            '- `max_members`: 2~12, 기본 5'
+        ),
+        request=RoomCreateSerializer,
+        responses={201: RoomSerializer},
+    ),
+    mine=extend_schema(
+        tags=['rooms'],
+        summary='내가 속한 방 목록',
+        description=(
+            '내가 **승인(approved)** 된 방만 조회합니다.\n\n'
+            '- 방장으로 만든 방과, 가입 수락된 방이 포함됩니다.'
+        ),
+        responses={200: RoomSerializer(many=True)},
+    ),
+    apply=extend_schema(
+        tags=['rooms'],
+        summary='방 가입 신청',
+        description=(
+            '모집 중인 방에 가입을 신청합니다. 상태는 `pending`입니다.\n\n'
+            '제한:\n'
+            '- 방장 본인은 신청 불가\n'
+            '- `closed` 방 또는 정원 초과 시 불가\n'
+            '- 이미 pending/approved/rejected 이력이 있으면 재신청 불가'
+        ),
+        request=None,
+        responses={
+            201: RoomMembershipSerializer,
+            400: OpenApiResponse(description='신청 불가 (이미 신청, 마감, 정원 등)'),
+        },
+    ),
+    applications=extend_schema(
+        tags=['rooms'],
+        summary='가입 신청 목록 (방장)',
+        description=(
+            '해당 방의 **대기(pending)** 신청 목록을 조회합니다.\n\n'
+            '- 방장만 호출 가능'
+        ),
+        responses={
+            200: RoomMembershipSerializer(many=True),
+            403: OpenApiResponse(description='방장이 아님'),
+        },
+    ),
 )
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -132,8 +193,35 @@ class RoomViewSet(viewsets.ModelViewSet):
 
 
 @extend_schema_view(
-    approve=extend_schema(tags=['rooms']),
-    reject=extend_schema(tags=['rooms']),
+    approve=extend_schema(
+        tags=['rooms'],
+        summary='가입 신청 수락 (방장)',
+        description=(
+            'pending 상태의 멤버십을 `approved`로 변경합니다.\n\n'
+            '- 해당 방의 방장만 가능\n'
+            '- 정원에 도달하면 방 상태가 `closed`로 바뀔 수 있습니다.'
+        ),
+        request=None,
+        responses={
+            200: RoomMembershipSerializer,
+            400: OpenApiResponse(description='대기 신청이 아니거나 정원 초과'),
+            403: OpenApiResponse(description='방장이 아님'),
+        },
+    ),
+    reject=extend_schema(
+        tags=['rooms'],
+        summary='가입 신청 거절 (방장)',
+        description=(
+            'pending 상태의 멤버십을 `rejected`로 변경합니다.\n\n'
+            '- 거절된 유저는 같은 방에 재신청할 수 없습니다.'
+        ),
+        request=None,
+        responses={
+            200: RoomMembershipSerializer,
+            400: OpenApiResponse(description='대기 신청이 아님'),
+            403: OpenApiResponse(description='방장이 아님'),
+        },
+    ),
 )
 class MembershipViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated, IsRoomOwner]

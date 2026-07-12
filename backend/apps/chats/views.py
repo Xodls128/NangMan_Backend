@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.response import Response
 
@@ -14,6 +14,13 @@ from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
 @extend_schema_view(
     get=extend_schema(
         tags=['chats'],
+        summary='채팅 메시지 목록',
+        description=(
+            '방의 채팅 메시지를 시간순으로 조회합니다.\n\n'
+            '- **승인(approved) 멤버만** 접근 가능\n'
+            '- `after_id`를 주면 해당 ID보다 큰 메시지만 반환 (폴링/증분 조회용)\n'
+            '- 실시간 수신은 WebSocket `ws://.../ws/rooms/{room_id}/?token=...` 사용'
+        ),
         parameters=[
             OpenApiParameter(
                 name='after_id',
@@ -23,8 +30,27 @@ from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
                 description='이 ID보다 큰 메시지만 조회',
             ),
         ],
+        responses={
+            200: ChatMessageSerializer(many=True),
+            403: OpenApiResponse(description='승인된 방 멤버가 아님'),
+        },
     ),
-    post=extend_schema(tags=['chats'], request=ChatMessageCreateSerializer, responses=ChatMessageSerializer),
+    post=extend_schema(
+        tags=['chats'],
+        summary='채팅 메시지 전송 (REST)',
+        description=(
+            'REST로 메시지를 저장합니다. 연결된 WebSocket 구독자에게도 브로드캐스트됩니다.\n\n'
+            '- **승인 멤버만** 가능\n'
+            '- content는 공백 불가, 최대 1000자\n'
+            '- 일반적인 실시간 전송은 WebSocket을 권장합니다.'
+        ),
+        request=ChatMessageCreateSerializer,
+        responses={
+            201: ChatMessageSerializer,
+            400: OpenApiResponse(description='내용 검증 실패'),
+            403: OpenApiResponse(description='승인된 방 멤버가 아님'),
+        },
+    ),
 )
 class RoomMessageListCreateView(generics.ListCreateAPIView):
     """
