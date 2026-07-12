@@ -27,6 +27,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt.token_blacklist',
+    'drf_spectacular',
 ]
 
 LOCAL_APPS = [
@@ -87,6 +88,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'NangMan API',
+    'DESCRIPTION': (
+        '게임 친구 매칭 서비스 REST API.\n\n'
+        '채팅 WebSocket(문서 외):\n'
+        '`ws://<host>/ws/rooms/{room_id}/?token=<access_jwt>`\n'
+        '메시지 전송 JSON: `{"type": "chat.message", "content": "..."}`'
+    ),
+    'VERSION': '0.1.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 SIMPLE_JWT = {

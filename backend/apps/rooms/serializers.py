@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Room, RoomMembership
@@ -32,11 +33,13 @@ class RoomSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.IntegerField())
     def get_approved_member_count(self, obj):
         if hasattr(obj, '_approved_count'):
             return obj._approved_count
         return obj.approved_member_count
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_my_membership_status(self, obj):
         status_map = self.context.get('membership_status_map')
         if status_map is not None:

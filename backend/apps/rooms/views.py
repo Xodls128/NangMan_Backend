@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -16,6 +17,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['rooms']),
+    retrieve=extend_schema(tags=['rooms']),
+    create=extend_schema(tags=['rooms']),
+    mine=extend_schema(tags=['rooms']),
+    apply=extend_schema(tags=['rooms']),
+    applications=extend_schema(tags=['rooms']),
+)
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post', 'head', 'options']
@@ -122,6 +131,10 @@ class RoomViewSet(viewsets.ModelViewSet):
         return Response(RoomMembershipSerializer(qs, many=True).data)
 
 
+@extend_schema_view(
+    approve=extend_schema(tags=['rooms']),
+    reject=extend_schema(tags=['rooms']),
+)
 class MembershipViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated, IsRoomOwner]
     queryset = RoomMembership.objects.select_related('room', 'user')

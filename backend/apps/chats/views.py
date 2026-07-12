@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.response import Response
 
@@ -10,6 +11,21 @@ from .permissions import IsApprovedRoomMemberFromURL
 from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['chats'],
+        parameters=[
+            OpenApiParameter(
+                name='after_id',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='이 ID보다 큰 메시지만 조회',
+            ),
+        ],
+    ),
+    post=extend_schema(tags=['chats'], request=ChatMessageCreateSerializer, responses=ChatMessageSerializer),
+)
 class RoomMessageListCreateView(generics.ListCreateAPIView):
     """
     GET  /api/rooms/{room_id}/messages/
