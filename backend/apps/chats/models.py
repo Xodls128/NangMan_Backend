@@ -4,6 +4,10 @@ from django.db import models
 
 
 class ChatMessage(models.Model):
+    class MessageType(models.TextChoices):
+        USER = 'user', '유저'
+        SYSTEM = 'system', '시스템'
+
     MAX_CONTENT_LENGTH = 1000
 
     room = models.ForeignKey(
@@ -17,6 +21,15 @@ class ChatMessage(models.Model):
         on_delete=models.CASCADE,
         related_name='chat_messages',
         verbose_name='보낸 사람',
+        null=True,
+        blank=True,
+        help_text='시스템 안내 메시지는 비울 수 있습니다.',
+    )
+    message_type = models.CharField(
+        '메시지 유형',
+        max_length=20,
+        choices=MessageType.choices,
+        default=MessageType.USER,
     )
     content = models.TextField(
         '내용',

@@ -5,8 +5,8 @@ from .models import ChatMessage
 
 @admin.register(ChatMessage)
 class ChatMessageAdmin(admin.ModelAdmin):
-    list_display = ('id', 'room', 'sender', 'content_preview', 'created_at')
-    list_filter = ('room',)
+    list_display = ('id', 'room', 'message_type', 'sender', 'content_preview', 'created_at')
+    list_filter = ('message_type', 'room')
     search_fields = ('content', 'sender__username', 'sender__nickname', 'room__title')
     raw_id_fields = ('room', 'sender')
     readonly_fields = ('created_at',)

@@ -10,7 +10,7 @@ class SenderSerializer(serializers.Serializer):
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
-    sender = SenderSerializer(read_only=True)
+    sender = SenderSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = ChatMessage
@@ -18,10 +18,11 @@ class ChatMessageSerializer(serializers.ModelSerializer):
             'id',
             'room',
             'sender',
+            'message_type',
             'content',
             'created_at',
         )
-        read_only_fields = ('id', 'room', 'sender', 'created_at')
+        read_only_fields = ('id', 'room', 'sender', 'message_type', 'created_at')
 
 
 class ChatMessageCreateSerializer(serializers.ModelSerializer):

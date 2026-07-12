@@ -15,6 +15,7 @@ from .serializers import (
     RoomSerializer,
     rooms_with_counts,
 )
+from apps.chats.broadcast import notify_member_joined
 
 
 @extend_schema_view(
@@ -237,7 +238,8 @@ class RoomViewSet(viewsets.ModelViewSet):
         description=(
             'pending 상태의 멤버십을 `approved`로 변경합니다.\n\n'
             '- 해당 방의 방장만 가능\n'
-            '- 정원에 도달하면 방 상태가 `closed`로 바뀔 수 있습니다.'
+            '- 정원에 도달하면 방 상태가 `closed`로 바뀔 수 있습니다.\n'
+            '- 수락 시 채팅방에 입장 안내(시스템) 메시지가 남고 WebSocket으로 푸시됩니다.'
         ),
         request=None,
         responses={
@@ -290,6 +292,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
                 room.status = Room.Status.CLOSED
                 room.save(update_fields=['status', 'updated_at'])
 
+        notify_member_joined(room=room, user=membership.user)
         return Response(RoomMembershipSerializer(membership).data)
 
     @action(detail=True, methods=['post'])

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from apps.rooms.models import Room
 
-from .broadcast import broadcast_chat_message
+from .broadcast import broadcast_chat_message, serialize_message
 from .models import ChatMessage
 from .permissions import IsApprovedRoomMemberFromURL
 from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
@@ -89,7 +89,6 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         message = serializer.save()
-        message = ChatMessage.objects.select_related('sender').get(pk=message.pk)
-        output = ChatMessageSerializer(message, context=self.get_serializer_context())
-        broadcast_chat_message(message.room_id, output.data)
-        return Response(output.data, status=status.HTTP_201_CREATED)
+        payload = serialize_message(message)
+        broadcast_chat_message(message.room_id, payload)
+        return Response(payload, status=status.HTTP_201_CREATED)
