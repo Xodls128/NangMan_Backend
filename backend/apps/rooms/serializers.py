@@ -2,7 +2,7 @@ from django.db.models import Count, Q
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import Room, RoomMembership
+from .models import Game, Room, RoomMembership
 
 
 class OwnerSerializer(serializers.Serializer):
@@ -11,8 +11,24 @@ class OwnerSerializer(serializers.Serializer):
     nickname = serializers.CharField()
 
 
+class GameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Game
+        fields = (
+            'id',
+            'slug',
+            'name',
+            'name_ko',
+            'short_name',
+            'color',
+            'icon',
+        )
+        read_only_fields = fields
+
+
 class RoomSerializer(serializers.ModelSerializer):
     owner = OwnerSerializer(read_only=True)
+    game = GameSerializer(read_only=True)
     approved_member_count = serializers.SerializerMethodField()
     my_membership_status = serializers.SerializerMethodField()
 
@@ -22,7 +38,7 @@ class RoomSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'description',
-            'game_name',
+            'game',
             'owner',
             'max_members',
             'status',
@@ -52,12 +68,21 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class RoomCreateSerializer(serializers.ModelSerializer):
+    game = serializers.SlugRelatedField(
+        slug_field='slug',
+        queryset=Game.objects.filter(is_active=True),
+        error_messages={
+            'does_not_exist': '존재하지 않거나 비활성화된 게임입니다.',
+            'invalid': '게임 슬러그가 올바르지 않습니다.',
+        },
+    )
+
     class Meta:
         model = Room
         fields = (
             'title',
             'description',
-            'game_name',
+            'game',
             'max_members',
         )
 
@@ -95,7 +120,7 @@ class RoomMembershipSerializer(serializers.ModelSerializer):
 
 
 def rooms_with_counts():
-    return Room.objects.select_related('owner').annotate(
+    return Room.objects.select_related('owner', 'game').annotate(
         _approved_count=Count(
             'memberships',
             filter=Q(memberships__status=RoomMembership.Status.APPROVED),

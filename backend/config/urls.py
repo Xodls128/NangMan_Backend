@@ -11,6 +11,7 @@ urlpatterns = [
 
 # API 문서는 로컬(DEBUG)에서만 노출
 if settings.DEBUG:
+    from django.conf.urls.static import static
     from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
     urlpatterns += [
@@ -21,3 +22,5 @@ if settings.DEBUG:
             name='swagger-ui',
         ),
     ]
+    # 게임 아이콘 등 업로드 파일 서빙 (로컬 전용)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

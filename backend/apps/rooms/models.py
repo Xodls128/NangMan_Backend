@@ -4,6 +4,27 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 
 
+class Game(models.Model):
+    slug = models.SlugField('슬러그', max_length=50, unique=True)
+    name = models.CharField('게임명', max_length=100, unique=True)
+    name_ko = models.CharField('한국어명', max_length=100)
+    short_name = models.CharField('약어', max_length=10, help_text='아이콘 플레이스홀더에 표시')
+    color = models.CharField('브랜드 색', max_length=7, help_text='#rrggbb')
+    icon = models.ImageField('아이콘', upload_to='games/', blank=True)
+    is_active = models.BooleanField('활성', default=True)
+    sort_order = models.PositiveSmallIntegerField('정렬 순서', default=0)
+    created_at = models.DateTimeField('생성일', auto_now_add=True)
+    updated_at = models.DateTimeField('수정일', auto_now=True)
+
+    class Meta:
+        verbose_name = '게임'
+        verbose_name_plural = '게임'
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return self.name
+
+
 class Room(models.Model):
     class Status(models.TextChoices):
         OPEN = 'open', '모집중'
@@ -14,7 +35,12 @@ class Room(models.Model):
 
     title = models.CharField('제목', max_length=100)
     description = models.TextField('설명', blank=True)
-    game_name = models.CharField('게임명', max_length=100)
+    game = models.ForeignKey(
+        Game,
+        on_delete=models.PROTECT,
+        related_name='rooms',
+        verbose_name='게임',
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -45,7 +71,7 @@ class Room(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.title} ({self.game_name})'
+        return f'{self.title} ({self.game.name})'
 
     @property
     def approved_member_count(self):

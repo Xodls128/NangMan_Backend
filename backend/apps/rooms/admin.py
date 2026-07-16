@@ -1,6 +1,23 @@
 from django.contrib import admin
 
-from .models import Room, RoomMembership
+from .models import Game, Room, RoomMembership
+
+
+@admin.register(Game)
+class GameAdmin(admin.ModelAdmin):
+    list_display = (
+        'name',
+        'name_ko',
+        'slug',
+        'short_name',
+        'color',
+        'is_active',
+        'sort_order',
+    )
+    list_filter = ('is_active',)
+    search_fields = ('name', 'name_ko', 'slug')
+    ordering = ('sort_order', 'id')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 class RoomMembershipInline(admin.TabularInline):
@@ -14,14 +31,14 @@ class RoomMembershipInline(admin.TabularInline):
 class RoomAdmin(admin.ModelAdmin):
     list_display = (
         'title',
-        'game_name',
+        'game',
         'owner',
         'max_members',
         'status',
         'created_at',
     )
-    list_filter = ('status', 'game_name')
-    search_fields = ('title', 'game_name', 'owner__username', 'owner__nickname')
+    list_filter = ('status', 'game')
+    search_fields = ('title', 'game__name', 'owner__username', 'owner__nickname')
     raw_id_fields = ('owner',)
     readonly_fields = ('created_at', 'updated_at')
     inlines = [RoomMembershipInline]

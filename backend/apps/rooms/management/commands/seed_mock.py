@@ -4,7 +4,7 @@ from django.db import transaction
 
 from apps.accounts.models import User
 from apps.chats.models import ChatMessage
-from apps.rooms.models import Room, RoomMembership
+from apps.rooms.models import Game, Room, RoomMembership
 
 PASSWORD = 'testpass123'
 
@@ -120,6 +120,7 @@ class Command(BaseCommand):
         member = users['ws_member']
         pending = users['ws_pending']
         rejected = users['ws_rejected']
+        games = {g.slug: g for g in Game.objects.all()}
 
         # Room A: 방장=ws_owner — 멤버/대기/거절 상태 한곳에
         room_a, created_a = self._get_or_create_owned_room(
@@ -127,7 +128,7 @@ class Command(BaseCommand):
             title='발로란트 듀오 구함',
             defaults={
                 'description': '랭크 골드 이상 / 마이크 필수. 목업 시드 방입니다.',
-                'game_name': 'Valorant',
+                'game': games['valorant'],
                 'max_members': 5,
                 'status': Room.Status.OPEN,
             },
@@ -143,7 +144,7 @@ class Command(BaseCommand):
             title='리그 스크림 모집',
             defaults={
                 'description': '주말 저녁 스크림. ws_member가 방장입니다.',
-                'game_name': 'League of Legends',
+                'game': games['lol'],
                 'max_members': 5,
                 'status': Room.Status.OPEN,
             },
@@ -157,7 +158,7 @@ class Command(BaseCommand):
             title='오버워치 캐주얼',
             defaults={
                 'description': '가볍게 한판. 아직 신청자가 없는 방입니다.',
-                'game_name': 'Overwatch 2',
+                'game': games['overwatch2'],
                 'max_members': 5,
                 'status': Room.Status.OPEN,
             },

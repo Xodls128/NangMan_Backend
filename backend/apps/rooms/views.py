@@ -1,15 +1,21 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Room, RoomMembership
+from .models import Game, Room, RoomMembership
 from .permissions import IsRoomOwner
 from .serializers import (
+    GameSerializer,
     RoomCreateSerializer,
     RoomMembershipSerializer,
     RoomSerializer,
@@ -20,14 +26,45 @@ from apps.chats.broadcast import notify_member_joined
 
 @extend_schema_view(
     list=extend_schema(
+        tags=['games'],
+        summary='게임 목록 조회',
+        description=(
+            '활성화된 게임 카탈로그를 정렬 순서대로 조회합니다.\n\n'
+            '- **비로그인 가능**\n'
+            '- 방 목록 필터 바와 방 생성 게임 선택에 사용됩니다.\n'
+            '- `icon`이 null이면 프론트에서 `color`+`short_name` 플레이스홀더로 표시합니다.'
+        ),
+        responses={200: GameSerializer(many=True)},
+    ),
+)
+class GameViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [AllowAny]
+    serializer_class = GameSerializer
+    queryset = Game.objects.filter(is_active=True)
+    pagination_class = None
+    http_method_names = ['get', 'head', 'options']
+
+
+@extend_schema_view(
+    list=extend_schema(
         tags=['rooms'],
         summary='방 목록 조회',
         description=(
             '전체 방 목록을 최신순으로 조회합니다.\n\n'
             '- **비로그인 가능**\n'
+            '- `?game=<slug>`로 특정 게임의 방만 필터링할 수 있습니다.\n'
             '- 로그인 시 각 방에 `my_membership_status`가 포함됩니다.\n'
             '- 비로그인 시 `my_membership_status`는 null입니다.'
         ),
+        parameters=[
+            OpenApiParameter(
+                name='game',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='게임 슬러그 (예: lol, valorant)',
+            ),
+        ],
         responses={200: RoomSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -45,6 +82,7 @@ from apps.chats.broadcast import notify_member_joined
         description=(
             '새 방을 생성합니다. 생성한 유저가 방장이 됩니다.\n\n'
             '- 생성과 동시에 방장은 `approved` 멤버로 등록됩니다.\n'
+            '- `game`: 게임 슬러그 (`GET /api/games/` 참고)\n'
             '- `max_members`: 2~12, 기본 5'
         ),
         request=RoomCreateSerializer,
@@ -112,7 +150,12 @@ class RoomViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        return rooms_with_counts()
+        qs = rooms_with_counts()
+        if self.action == 'list':
+            game_slug = self.request.query_params.get('game')
+            if game_slug:
+                qs = qs.filter(game__slug=game_slug)
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'create':
