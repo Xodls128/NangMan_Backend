@@ -36,7 +36,7 @@ jobs:
             git reset --hard origin/main
             docker compose up -d --build --remove-orphans
             sleep 5
-            docker compose exec -T web curl -sf http://127.0.0.1:8000/health/
+            docker compose exec -T web curl -sf -H "Host: api.gamemate.kr" http://127.0.0.1:8000/health/
             docker compose ps
 
       - name: Production health check

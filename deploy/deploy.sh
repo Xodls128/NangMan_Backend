@@ -16,6 +16,6 @@ docker compose ps
 
 echo "==> health (container)"
 sleep 3
-docker compose exec -T web curl -sf http://127.0.0.1:8000/health/ && echo
+docker compose exec -T web curl -sf -H "Host: api.gamemate.kr" http://127.0.0.1:8000/health/ && echo
 
 echo "배포 완료"
