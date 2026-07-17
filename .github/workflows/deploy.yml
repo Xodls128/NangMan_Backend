@@ -1,0 +1,56 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Docker redeploy on EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.EC2_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then
+              APP_DIR="/home/ubuntu/NangMan"
+            fi
+            cd "$APP_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose up -d --build --remove-orphans
+            sleep 5
+            docker compose exec -T web curl -sf http://127.0.0.1:8000/health/
+            docker compose ps
+
+      - name: Production health check
+        if: ${{ vars.PRODUCTION_URL != '' }}
+        run: |
+          set -e
+          URL="${{ vars.PRODUCTION_URL }}/health/"
+          for i in 1 2 3 4 5; do
+            if curl -sf "$URL"; then
+              echo "OK: $URL"
+              exit 0
+            fi
+            echo "retry $i..."
+            sleep 5
+          done
+          echo "Health check failed: $URL"
+          exit 1

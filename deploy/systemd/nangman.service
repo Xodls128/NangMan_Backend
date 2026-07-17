@@ -1,0 +1,25 @@
+[Unit]
+Description=NangMan Django ASGI (Daphne)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/NangMan/backend
+EnvironmentFile=/home/ubuntu/NangMan/backend/.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+ExecStart=/home/ubuntu/NangMan/backend/venv/bin/daphne \
+    -b 127.0.0.1 \
+    -p 8000 \
+    config.asgi:application
+Restart=always
+RestartSec=3
+
+# 보안·안정성
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

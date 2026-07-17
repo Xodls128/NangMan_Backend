@@ -70,7 +70,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# 로컬·단일 프로세스용. 배포 시 워커가 여러 개면 Redis Channel Layer로 교체.
+# 로컬·단일 프로세스용. production에서는 Redis Channel Layer로 교체.
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',

@@ -26,7 +26,7 @@
 | 3 | 방 목록 → 가입 신청 → 방장 수락 | 완료 |
 | 4 | 방 내부 채팅 (REST + WebSocket) | 완료 |
 | 5 | 카카오 소셜 로그인 | 완료 (로컬) |
-| — | EC2 배포 · WSS · Redis Channel Layer | 미완 |
+| — | EC2 배포 · WSS · Redis Channel Layer | Docker Compose + Actions 설정 완료 · 서버 적용 진행 |
 
 ## 폴더 구조
 
@@ -190,17 +190,31 @@ python manage.py seed_mock --flush
 `manage.py` 기본: development  
 `wsgi.py` / `asgi.py` 기본: production  
 
-## 배포 시 WebSocket 참고 (미적용)
+## 배포 시 WebSocket 참고
 
-- Daphne(ASGI) + Nginx `Upgrade` / `Connection`  
-- HTTPS → 클라이언트는 `wss://`  
-- `AllowedHostsOriginValidator` + `ALLOWED_HOSTS`  
-- Redis Channel Layer (멀티 프로세스)  
-- JWT를 쿼리로 넘기는 현재 방식은 로그 노출에 주의  
+- Daphne(ASGI) + Nginx `Upgrade` / `Connection` (Docker `nginx` 서비스)
+- HTTPS → 클라이언트는 `wss://`
+- `AllowedHostsOriginValidator` + `ALLOWED_HOSTS` (프론트 도메인 포함)
+- Redis Channel Layer (`channels-redis`)
+- JWT를 쿼리로 넘기는 현재 방식은 로그 노출에 주의
+
+## 배포 (EC2 + Docker)
+
+백엔드 도메인: `api.gamemate.kr`  
+Docker Compose + GitHub Actions 자동 재배포: [deploy/README.md](deploy/README.md)
+
+```bash
+# EC2 최초
+git clone https://github.com/Xodls128/NangMan_Backend.git ~/NangMan
+sudo bash ~/NangMan/deploy/setup-server.sh
+# → .env 작성 → docker compose up -d --build
+# → 가비아 A레코드(api → EC2 IP) → bash deploy/init-ssl.sh
+# → GitHub Secrets(EC2_HOST/USER/SSH_KEY) 등록 후 main push 시 자동 배포
+```
 
 ## 남은 과제 (요약)
 
-- 프로덕션 배포 (EC2, Postgres, SSL, WSS, Redis)
+- 프로덕션 배포 실행 (EC2 인스턴스·DNS·SSL·Actions Secrets)
 - JWT refresh 프론트 자동 갱신·로그아웃 연동 강화
 - 방 나가기/강퇴 등 세부 정책
 - 프론트를 서비스 UI 수준으로 고도화

@@ -1,2 +1,5 @@
 /frontend/*
 key/*
+.env
+.env.*
+!.env.example
