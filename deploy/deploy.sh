@@ -15,7 +15,21 @@ echo "==> 상태"
 docker compose ps
 
 echo "==> health (container)"
-sleep 3
-docker compose exec -T web curl -sf -H "Host: api.gamemate.kr" http://127.0.0.1:8000/health/ && echo
+ok=0
+for i in $(seq 1 24); do
+  if docker compose exec -T web curl -sf -H "Host: api.gamemate.kr" http://127.0.0.1:8000/health/; then
+    echo
+    echo "OK (attempt $i)"
+    ok=1
+    break
+  fi
+  echo "retry $i/24..."
+  sleep 5
+done
+if [ "$ok" -ne 1 ]; then
+  echo "health check failed"
+  docker compose logs web --tail 80
+  exit 1
+fi
 
 echo "배포 완료"
