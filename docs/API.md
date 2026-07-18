@@ -16,9 +16,70 @@
 
 ## 1. 인증 (auth)
 
+### `GET /api/auth/mode/` 🔓
+
+서버 인증 모드 조회. 프론트는 이 값으로 로그인 UI를 전환합니다.
+
+**응답 200**
+```json
+{ "mvp_test": false, "auth_mode": "kakao" }
+```
+
+| `mvp_test` | `auth_mode` | 의미 |
+|------------|-------------|------|
+| `false` | `kakao` | 카카오 로그인 (기본) |
+| `true` | `mvp` | 닉네임·비밀번호 통합 가입/로그인 |
+
+환경 변수 `MVP_TEST=true` 일 때 MVP 모드. 기본값은 `false`.
+
+---
+
+### `POST /api/auth/mvp/` 🔓
+
+`MVP_TEST=true` 전용. 닉네임·비밀번호로 **가입 또는 로그인**을 한 번에 처리합니다.
+
+- 닉네임이 없으면 → 회원가입 후 JWT 발급 (`201`, `created: true`)
+- 닉네임이 있으면 → 비밀번호로 로그인 (`200`, `created: false`)
+- 닉네임은 `username`으로 저장되며 **대소문자를 구분하지 않고 고유**해야 합니다.
+
+**요청**
+```json
+{ "nickname": "게이머닉", "password": "..." }
+```
+
+**응답 201 (신규 가입)**
+```json
+{
+  "access": "...",
+  "refresh": "...",
+  "user": { "id": 1, "username": "게이머닉", "nickname": "게이머닉", "provider": "local" },
+  "created": true,
+  "message": "회원가입이 완료되었고 로그인되었습니다."
+}
+```
+
+**응답 200 (기존 로그인)**
+```json
+{
+  "access": "...",
+  "refresh": "...",
+  "user": { "..." },
+  "created": false,
+  "message": "로그인되었습니다."
+}
+```
+
+| 코드 | 의미 |
+|------|------|
+| 400 | 입력 검증 실패 (짧은 비밀번호 등) |
+| 401 | `해당 닉네임이 이미 존재하며 비밀번호가 다릅니다.` |
+| 403 | `MVP_TEST` 비활성 |
+
+---
+
 ### `GET /api/auth/kakao/login-url/` 🔓
 
-카카오 인가 URL 조회.
+카카오 인가 URL 조회. `MVP_TEST=true`이면 `403`.
 
 **응답 200**
 ```json
@@ -31,7 +92,7 @@ Redirect URI는 서버 `KAKAO_REDIRECT_URI` 사용.
 
 ### `POST /api/auth/kakao/` 🔓
 
-카카오 인가 코드 → JWT.
+카카오 인가 코드 → JWT. `MVP_TEST=true`이면 `403`.
 
 **요청**
 ```json
@@ -50,6 +111,7 @@ Redirect URI는 서버 `KAKAO_REDIRECT_URI` 사용.
 | 코드 | 의미 |
 |------|------|
 | 400 | 잘못된 code / 카카오 오류 |
+| 403 | MVP 테스트 모드로 카카오 비활성 |
 | 502 | 카카오 서버 통신 실패 |
 
 ---

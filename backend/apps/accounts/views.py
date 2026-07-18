@@ -1,3 +1,4 @@
+from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,8 +11,34 @@ from rest_framework_simplejwt.views import (
 )
 
 from .kakao import KakaoAPIError, build_authorize_url, exchange_code_for_token, fetch_kakao_profile
-from .serializers import KakaoLoginSerializer, TokenPairSerializer, UserSerializer, tokens_for_user
-from .services import upsert_kakao_user
+from .serializers import (
+    AuthModeSerializer,
+    KakaoLoginSerializer,
+    MvpAuthResponseSerializer,
+    MvpLoginSerializer,
+    TokenPairSerializer,
+    UserSerializer,
+    tokens_for_user,
+)
+from .services import mvp_login_or_register, upsert_kakao_user
+
+
+def _mvp_test_enabled() -> bool:
+    return bool(getattr(settings, 'MVP_TEST', False))
+
+
+def _kakao_disabled_response() -> Response:
+    return Response(
+        {'detail': 'MVP 테스트 모드에서는 카카오 로그인을 사용할 수 없습니다.'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _mvp_disabled_response() -> Response:
+    return Response(
+        {'detail': 'MVP 테스트 모드가 비활성화되어 있습니다.'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 class DocumentedTokenObtainPairView(TokenObtainPairView):
@@ -22,7 +49,8 @@ class DocumentedTokenObtainPairView(TokenObtainPairView):
             'username / password로 로그인하여 access·refresh 토큰을 발급합니다.\n\n'
             '- **access**: API·WebSocket 인증에 사용 (기본 30분)\n'
             '- **refresh**: access 재발급에 사용 (기본 7일)\n'
-            '- 개발·시드 계정용. 일반 유저는 카카오 로그인을 사용하세요.'
+            '- 개발·시드 계정용. 일반 유저는 카카오 로그인을 사용하세요.\n'
+            '- `MVP_TEST=true`일 때는 `POST /api/auth/mvp/` 를 사용하세요.'
         ),
         responses={
             200: OpenApiResponse(description='토큰 발급 성공'),
@@ -91,6 +119,78 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
 
+class AuthModeView(APIView):
+    """프론트 로그인 UI가 따를 인증 모드."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=['auth'],
+        summary='인증 모드 조회',
+        description=(
+            '서버 `MVP_TEST` 설정에 따른 로그인 모드를 반환합니다.\n\n'
+            '- `mvp_test=true` / `auth_mode=mvp`: 카카오 비활성, 닉네임·비밀번호 통합 인증\n'
+            '- 그 외: 카카오 로그인 모드'
+        ),
+        responses={200: AuthModeSerializer},
+    )
+    def get(self, request):
+        mvp = _mvp_test_enabled()
+        return Response(
+            {
+                'mvp_test': mvp,
+                'auth_mode': 'mvp' if mvp else 'kakao',
+            }
+        )
+
+
+class MvpLoginView(APIView):
+    """닉네임·비밀번호로 가입 또는 로그인 (MVP_TEST 전용)."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=['auth'],
+        summary='MVP 통합 가입/로그인',
+        description=(
+            '`MVP_TEST=true`일 때만 사용할 수 있습니다.\n\n'
+            '- 닉네임이 없으면 회원가입 후 JWT 발급\n'
+            '- 닉네임이 있으면 비밀번호로 로그인\n'
+            '- 닉네임은 대소문자를 구분하지 않고 고유해야 합니다\n'
+            '- 비밀번호가 틀리면 '
+            '`해당 닉네임이 이미 존재하며 비밀번호가 다릅니다.` 메시지를 반환합니다'
+        ),
+        request=MvpLoginSerializer,
+        responses={
+            200: MvpAuthResponseSerializer,
+            201: MvpAuthResponseSerializer,
+            400: OpenApiResponse(description='입력 검증 실패'),
+            401: OpenApiResponse(description='비밀번호 불일치'),
+            403: OpenApiResponse(description='MVP_TEST 비활성'),
+        },
+    )
+    def post(self, request):
+        if not _mvp_test_enabled():
+            return _mvp_disabled_response()
+
+        serializer = MvpLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user, created = mvp_login_or_register(
+            serializer.validated_data['nickname'],
+            serializer.validated_data['password'],
+        )
+        payload = tokens_for_user(user)
+        payload['created'] = created
+        if created:
+            payload['message'] = '회원가입이 완료되었고 로그인되었습니다.'
+            http_status = status.HTTP_201_CREATED
+        else:
+            payload['message'] = '로그인되었습니다.'
+            http_status = status.HTTP_200_OK
+        return Response(payload, status=http_status)
+
+
 class KakaoLoginUrlView(APIView):
     """프론트/수동 테스트용 카카오 인가 URL."""
 
@@ -102,11 +202,17 @@ class KakaoLoginUrlView(APIView):
         description=(
             '브라우저에서 열 카카오 로그인 URL을 반환합니다.\n\n'
             '- Redirect URI는 서버 `KAKAO_REDIRECT_URI` 설정을 사용합니다.\n'
-            '- 로그인 후 콜백 URL의 `code`를 `POST /api/auth/kakao/` 로 보내세요.'
+            '- 로그인 후 콜백 URL의 `code`를 `POST /api/auth/kakao/` 로 보내세요.\n'
+            '- `MVP_TEST=true`이면 403을 반환합니다.'
         ),
-        responses={200: OpenApiResponse(description='{ "authorize_url": "..." }')},
+        responses={
+            200: OpenApiResponse(description='{ "authorize_url": "..." }'),
+            403: OpenApiResponse(description='MVP 테스트 모드로 카카오 비활성'),
+        },
     )
     def get(self, request):
+        if _mvp_test_enabled():
+            return _kakao_disabled_response()
         try:
             url = build_authorize_url()
         except KakaoAPIError as exc:
@@ -128,16 +234,21 @@ class KakaoLoginView(APIView):
             '2. Redirect URI로 `code` 수신\n'
             '3. 이 API에 `code` POST\n'
             '4. access / refresh JWT + user 반환\n\n'
-            'Redirect URI는 카카오 콘솔 등록값과 `KAKAO_REDIRECT_URI`가 일치해야 합니다.'
+            'Redirect URI는 카카오 콘솔 등록값과 `KAKAO_REDIRECT_URI`가 일치해야 합니다.\n'
+            '`MVP_TEST=true`이면 403을 반환합니다.'
         ),
         request=KakaoLoginSerializer,
         responses={
             200: TokenPairSerializer,
             400: OpenApiResponse(description='잘못된 code 또는 카카오 오류'),
+            403: OpenApiResponse(description='MVP 테스트 모드로 카카오 비활성'),
             502: OpenApiResponse(description='카카오 서버 통신 실패'),
         },
     )
     def post(self, request):
+        if _mvp_test_enabled():
+            return _kakao_disabled_response()
+
         serializer = KakaoLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         code = serializer.validated_data['code'].strip()

@@ -18,7 +18,7 @@
 |------|------|
 | Backend | Python 3.11, Django, DRF, SimpleJWT, Channels, Daphne, drf-spectacular |
 | DB | 로컬 SQLite / 프로덕션 PostgreSQL |
-| Auth | JWT + 카카오 OAuth (인가 코드 → JWT) |
+| Auth | JWT + 카카오 OAuth (또는 `MVP_TEST` 시 닉네임 통합 로그인) |
 | Frontend | React, Vite, TypeScript (기능 검증용) |
 
 ## MVP 진행 상태
@@ -90,18 +90,36 @@ npm run dev
 
 ### 3. 환경 변수 (backend/.env)
 
-`.env.example` 참고. 카카오 관련:
+`.env.example` 참고.
 
 ```env
+# MVP 테스트: 카카오 끄고 닉네임·비밀번호 통합 가입/로그인
+MVP_TEST=false
+
 KAKAO_REST_API_KEY=
 KAKAO_CLIENT_SECRET=
 KAKAO_REDIRECT_URI=http://localhost:5173/auth/kakao/callback
 ```
 
-카카오 디벨로퍼스에서 **플랫폼 키 → REST API 키**에 Redirect URI를 등록해야 합니다.  
-(제품 설정만 넣고 REST 키에 없으면 `KOE006`이 납니다.)
+- `MVP_TEST=true` 일 때만 MVP 통합 인증이 켜집니다. (`TURE` 등 오타는 무시)
+- 운영(`.env` / Docker)에서는 기본 `false` 유지를 권장합니다.
+- 카카오 사용 시 디벨로퍼스에서 **플랫폼 키 → REST API 키**에 Redirect URI를 등록해야 합니다.  
+  (제품 설정만 넣고 REST 키에 없으면 `KOE006`이 납니다.)
 
 ## 인증
+
+### 인증 모드
+
+- `GET /api/auth/mode/` → `{ mvp_test, auth_mode }`  
+  프론트는 이 API로 로그인 UI를 전환합니다.
+
+### MVP 통합 가입/로그인 (`MVP_TEST=true`)
+
+- `POST /api/auth/mvp/` body `{ "nickname", "password" }`
+- 닉네임이 없으면 회원가입 후 로그인, 있으면 로그인
+- 닉네임은 대소문자 구분 없이 고유
+- 비밀번호 불일치: `해당 닉네임이 이미 존재하며 비밀번호가 다릅니다.`
+- 이 모드에서는 카카오 API가 `403`으로 차단됩니다.
 
 ### 개발·시드용 (username/password)
 
@@ -110,7 +128,7 @@ KAKAO_REDIRECT_URI=http://localhost:5173/auth/kakao/callback
 - `POST /api/auth/logout/` (refresh 블랙리스트)
 - `GET /api/auth/me/`
 
-### 카카오 로그인
+### 카카오 로그인 (`MVP_TEST=false` 기본)
 
 1. `GET /api/auth/kakao/login-url/` → 인가 URL  
 2. 브라우저에서 카카오 동의 → Redirect:  
@@ -118,7 +136,7 @@ KAKAO_REDIRECT_URI=http://localhost:5173/auth/kakao/callback
 3. `POST /api/auth/kakao/` body `{ "code": "..." }` → `{ access, refresh, user }`  
 4. 이후 API·WebSocket은 기존과 같이 Bearer / `?token=` 사용  
 
-프론트 로그인 모달: **카카오 로그인** + 테스트 계정(username) 병행.
+프론트 로그인 모달: MVP 모드면 **닉네임·비밀번호**, 아니면 **카카오 로그인** + 테스트 계정.
 
 ## 방 · 멤버십 API (요약)
 

@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class UserManager(DjangoUserManager):
@@ -40,6 +41,10 @@ class User(AbstractUser):
             models.UniqueConstraint(
                 fields=['provider', 'provider_uid'],
                 name='uniq_accounts_user_provider_uid',
+            ),
+            models.UniqueConstraint(
+                Lower('username'),
+                name='uniq_accounts_user_username_ci',
             ),
         ]
 

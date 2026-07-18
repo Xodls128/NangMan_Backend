@@ -146,6 +146,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # 목업/시드 데이터 — development에서만 True로 덮어씀
 SEED_MOCK_DATA = False
 
+# MVP 테스트 모드: 카카오 로그인 비활성 + 닉네임/비밀번호 통합 가입·로그인
+# 표준 활성화 값: MVP_TEST=true (대소문자 무시). 오타(TURE 등)는 비활성.
+MVP_TEST = os.getenv('MVP_TEST', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+
 # 카카오 OAuth (로컬 Redirect URI 예: http://localhost:5173/auth/kakao/callback)
 KAKAO_REST_API_KEY = os.getenv('KAKAO_REST_API_KEY', '')
 KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
