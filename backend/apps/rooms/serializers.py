@@ -29,6 +29,11 @@ class GameSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     owner = OwnerSerializer(read_only=True)
     game = GameSerializer(read_only=True)
+    play_time_label = serializers.CharField(
+        source='get_play_time_slot_display',
+        read_only=True,
+        allow_null=True,
+    )
     approved_member_count = serializers.SerializerMethodField()
     my_membership_status = serializers.SerializerMethodField()
 
@@ -38,6 +43,8 @@ class RoomSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'description',
+            'play_time_slot',
+            'play_time_label',
             'game',
             'owner',
             'max_members',
@@ -68,6 +75,16 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class RoomCreateSerializer(serializers.ModelSerializer):
+    play_time_slot = serializers.ChoiceField(
+        choices=Room.PlayTimeSlot.choices,
+        required=True,
+        allow_blank=False,
+        allow_null=False,
+        error_messages={
+            'required': '플레이 시간대를 선택해 주세요.',
+            'invalid_choice': '올바른 플레이 시간대를 선택해 주세요.',
+        },
+    )
     game = serializers.SlugRelatedField(
         slug_field='slug',
         queryset=Game.objects.filter(is_active=True),
@@ -83,6 +100,7 @@ class RoomCreateSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'game',
+            'play_time_slot',
             'max_members',
         )
 

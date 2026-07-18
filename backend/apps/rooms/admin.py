@@ -33,11 +33,12 @@ class RoomAdmin(admin.ModelAdmin):
         'title',
         'game',
         'owner',
+        'play_time_slot',
         'max_members',
         'status',
         'created_at',
     )
-    list_filter = ('status', 'game')
+    list_filter = ('status', 'game', 'play_time_slot')
     search_fields = ('title', 'game__name', 'owner__username', 'owner__nickname')
     raw_id_fields = ('owner',)
     readonly_fields = ('created_at', 'updated_at')

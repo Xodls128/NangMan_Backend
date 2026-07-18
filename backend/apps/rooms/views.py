@@ -83,6 +83,7 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
             '새 방을 생성합니다. 생성한 유저가 방장이 됩니다.\n\n'
             '- 생성과 동시에 방장은 `approved` 멤버로 등록됩니다.\n'
             '- `game`: 게임 슬러그 (`GET /api/games/` 참고)\n'
+            '- `play_time_slot`: dawn / morning / afternoon / evening 중 하나\n'
             '- `max_members`: 2~12, 기본 5'
         ),
         request=RoomCreateSerializer,

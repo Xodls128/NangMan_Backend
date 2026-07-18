@@ -30,11 +30,25 @@ class Room(models.Model):
         OPEN = 'open', '모집중'
         CLOSED = 'closed', '마감'
 
+    class PlayTimeSlot(models.TextChoices):
+        DAWN = 'dawn', '새벽 (00:00~06:00)'
+        MORNING = 'morning', '오전 (06:00~12:00)'
+        AFTERNOON = 'afternoon', '오후 (12:00~18:00)'
+        EVENING = 'evening', '저녁 (18:00~24:00)'
+
     MAX_MEMBERS_LIMIT = 12
     DEFAULT_MAX_MEMBERS = 5
 
     title = models.CharField('제목', max_length=100)
     description = models.TextField('설명', blank=True)
+    play_time_slot = models.CharField(
+        '플레이 시간대',
+        max_length=20,
+        choices=PlayTimeSlot.choices,
+        null=True,
+        blank=True,
+        help_text='함께 플레이할 선호 시간대. 기존 방은 미지정일 수 있습니다.',
+    )
     game = models.ForeignKey(
         Game,
         on_delete=models.PROTECT,

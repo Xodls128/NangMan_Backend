@@ -199,6 +199,7 @@ refresh 블랙리스트 등록.
   "title": "같이 하실 분",
   "description": "옵션",
   "game": "lol",
+  "play_time_slot": "evening",
   "max_members": 5
 }
 ```
@@ -207,10 +208,15 @@ refresh 블랙리스트 등록.
 |------|------|------|
 | title | O | 최대 100자 |
 | game | O | 게임 slug (`GET /api/games/`) |
+| play_time_slot | O | `dawn`(00~06), `morning`(06~12), `afternoon`(12~18), `evening`(18~24) |
 | description | | |
 | max_members | | 2~12, 기본 5 |
 
 **응답 201:** `Room`
+
+방 목록·상세 응답에는 선택값 `play_time_slot`과 표시 문구
+`play_time_label`(예: `저녁 (18:00~24:00)`)이 함께 포함됩니다.
+기존 방은 두 값이 `null`일 수 있습니다.
 
 ---
 
