@@ -50,3 +50,26 @@ def notify_member_joined(*, room, user) -> ChatMessage:
         content=f'{display}님이 방에 입장했습니다.',
         related_user=user,
     )
+
+
+def notify_member_left(*, room, user) -> ChatMessage:
+    display = (user.nickname or user.username).strip() or user.username
+    return create_system_message(
+        room=room,
+        content=f'{display}님이 방을 나갔습니다.',
+        related_user=user,
+    )
+
+
+def broadcast_room_deleted(room_id: int) -> None:
+    """방 삭제 시 채팅 WebSocket 구독자에게 알립니다."""
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    async_to_sync(channel_layer.group_send)(
+        f'chat_room_{room_id}',
+        {
+            'type': 'room.deleted',
+            'room_id': room_id,
+        },
+    )

@@ -21,7 +21,11 @@ from .serializers import (
     RoomSerializer,
     rooms_with_counts,
 )
-from apps.chats.broadcast import notify_member_joined
+from apps.chats.broadcast import (
+    broadcast_room_deleted,
+    notify_member_joined,
+    notify_member_left,
+)
 
 
 @extend_schema_view(
@@ -140,14 +144,47 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
             403: OpenApiResponse(description='승인된 방 멤버가 아님'),
         },
     ),
+    destroy=extend_schema(
+        tags=['rooms'],
+        summary='방 삭제 (방장)',
+        description=(
+            '방을 **완전히 삭제**합니다. 멤버십·채팅 기록도 함께 삭제됩니다.\n\n'
+            '- 방장만 가능 (방장은 나가기 대신 삭제 사용)\n'
+            '- 삭제 전 WebSocket `room.deleted` 이벤트가 구독자에게 전달됩니다.'
+        ),
+        responses={
+            204: OpenApiResponse(description='삭제됨'),
+            403: OpenApiResponse(description='방장이 아님'),
+            404: OpenApiResponse(description='방이 존재하지 않음'),
+        },
+    ),
+    leave=extend_schema(
+        tags=['rooms'],
+        summary='방 나가기',
+        description=(
+            '승인된 멤버가 방에서 나갑니다. 멤버십 row가 삭제되며 **재가입 신청이 가능**합니다.\n\n'
+            '- 방장은 사용 불가 (방 삭제 이용)\n'
+            '- 정원 마감(`closed`) 상태에서 인원이 줄면 `open`으로 복구됩니다.\n'
+            '- 채팅방에 시스템 메시지가 남고 WebSocket으로 푸시됩니다.'
+        ),
+        request=None,
+        responses={
+            204: OpenApiResponse(description='나감'),
+            400: OpenApiResponse(description='방장이 나가기 시도'),
+            403: OpenApiResponse(description='승인된 멤버가 아님'),
+            404: OpenApiResponse(description='방이 존재하지 않음'),
+        },
+    ),
 )
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'post', 'head', 'options']
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_permissions(self):
         if self.action == 'list':
             return [AllowAny()]
+        if self.action == 'destroy':
+            return [IsAuthenticated(), IsRoomOwner()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -183,7 +220,7 @@ class RoomViewSet(viewsets.ModelViewSet):
                 )
                 .values_list('id', flat=True)
             )
-        elif self.action in ('retrieve', 'members', 'applications', 'apply'):
+        elif self.action in ('retrieve', 'members', 'applications', 'apply', 'leave'):
             room_ids = [self.kwargs['pk']]
 
         if room_ids:
@@ -273,6 +310,42 @@ class RoomViewSet(viewsets.ModelViewSet):
             .order_by('created_at')
         )
         return Response(RoomMembershipSerializer(qs, many=True).data)
+
+    def destroy(self, request, *args, **kwargs):
+        room = self.get_object()
+        room_id = room.id
+        broadcast_room_deleted(room_id)
+        room.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def leave(self, request, pk=None):
+        room = self.get_object()
+
+        if room.owner_id == request.user.id:
+            raise ValidationError('방장은 방을 나갈 수 없습니다. 방 삭제를 이용해 주세요.')
+
+        membership = RoomMembership.objects.filter(
+            room=room,
+            user=request.user,
+            status=RoomMembership.Status.APPROVED,
+        ).first()
+        if membership is None:
+            raise PermissionDenied('승인된 방 멤버만 방을 나갈 수 있습니다.')
+
+        user = request.user
+        with transaction.atomic():
+            membership.delete()
+            room.refresh_from_db()
+            if (
+                room.status == Room.Status.CLOSED
+                and room.approved_member_count < room.max_members
+            ):
+                room.status = Room.Status.OPEN
+                room.save(update_fields=['status', 'updated_at'])
+
+        notify_member_left(room=room, user=user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema_view(

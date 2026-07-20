@@ -18,6 +18,7 @@ class RoomChatConsumer(AsyncJsonWebsocketConsumer):
 
     서버 → 클라이언트:
       {"type": "chat.message", "message": {...}}
+      {"type": "room.deleted", "room_id": <int>}
       {"type": "error", "detail": "..."}
     """
 
@@ -69,6 +70,12 @@ class RoomChatConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'type': 'chat.message',
             'message': event['message'],
+        })
+
+    async def room_deleted(self, event):
+        await self.send_json({
+            'type': 'room.deleted',
+            'room_id': event['room_id'],
         })
 
     @database_sync_to_async
