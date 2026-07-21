@@ -193,3 +193,140 @@ class RoomPlayTimeSlotTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data['play_time_slot'])
         self.assertIsNone(response.data['play_time_label'])
+
+
+DISCORD_URL = 'https://discord.gg/testinvite123'
+
+
+class RoomDiscordInviteTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.game = Game.objects.create(
+            slug='discord-game',
+            name='Discord Game',
+            name_ko='디스코드 게임',
+            short_name='DG',
+            color='#5865F2',
+        )
+        self.owner = _create_user(
+            username='discord_owner',
+            nickname='방장',
+            provider_uid='local_discord_owner',
+        )
+        self.member = _create_user(
+            username='discord_member',
+            nickname='멤버',
+            provider_uid='local_discord_member',
+        )
+        self.outsider = _create_user(
+            username='discord_outsider',
+            nickname='외부',
+            provider_uid='local_discord_outsider',
+        )
+
+    def test_create_room_with_optional_discord_url(self):
+        self.client.force_authenticate(self.owner)
+        res = self.client.post(
+            '/api/rooms/',
+            {
+                'title': '디스코드 방',
+                'game': self.game.slug,
+                'play_time_slot': Room.PlayTimeSlot.EVENING,
+                'max_members': 5,
+                'discord_invite_url': DISCORD_URL,
+            },
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['discord_invite_url'], DISCORD_URL)
+        room = Room.objects.get(pk=res.data['id'])
+        self.assertEqual(room.discord_invite_url, DISCORD_URL)
+
+    def test_create_room_without_discord_url(self):
+        self.client.force_authenticate(self.owner)
+        res = self.client.post(
+            '/api/rooms/',
+            {
+                'title': '링크 없음',
+                'game': self.game.slug,
+                'play_time_slot': Room.PlayTimeSlot.MORNING,
+                'max_members': 5,
+            },
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(res.data['discord_invite_url'])
+
+    def test_owner_can_patch_discord_url(self):
+        room = Room.create_with_owner(
+            owner=self.owner,
+            title='패치 테스트',
+            game=self.game,
+            play_time_slot=Room.PlayTimeSlot.AFTERNOON,
+        )
+        self.client.force_authenticate(self.owner)
+        res = self.client.patch(
+            f'/api/rooms/{room.id}/',
+            {'discord_invite_url': DISCORD_URL},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['discord_invite_url'], DISCORD_URL)
+
+    def test_owner_can_clear_discord_url(self):
+        room = Room.create_with_owner(
+            owner=self.owner,
+            title='삭제 테스트',
+            game=self.game,
+            play_time_slot=Room.PlayTimeSlot.AFTERNOON,
+            discord_invite_url=DISCORD_URL,
+        )
+        self.client.force_authenticate(self.owner)
+        res = self.client.patch(
+            f'/api/rooms/{room.id}/',
+            {'discord_invite_url': ''},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIsNone(res.data['discord_invite_url'])
+
+    def test_non_owner_cannot_patch(self):
+        room = Room.create_with_owner(
+            owner=self.owner,
+            title='권한 테스트',
+            game=self.game,
+            play_time_slot=Room.PlayTimeSlot.AFTERNOON,
+        )
+        RoomMembership.objects.create(
+            room=room,
+            user=self.member,
+            status=RoomMembership.Status.APPROVED,
+        )
+        self.client.force_authenticate(self.member)
+        res = self.client.patch(
+            f'/api/rooms/{room.id}/',
+            {'discord_invite_url': DISCORD_URL},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_member_sees_discord_url_outsider_does_not(self):
+        room = Room.create_with_owner(
+            owner=self.owner,
+            title='노출 테스트',
+            game=self.game,
+            play_time_slot=Room.PlayTimeSlot.EVENING,
+            discord_invite_url=DISCORD_URL,
+        )
+        RoomMembership.objects.create(
+            room=room,
+            user=self.member,
+            status=RoomMembership.Status.APPROVED,
+        )
+        self.client.force_authenticate(self.member)
+        member_res = self.client.get(f'/api/rooms/{room.id}/')
+        self.assertEqual(member_res.data['discord_invite_url'], DISCORD_URL)
+
+        self.client.force_authenticate(self.outsider)
+        outsider_res = self.client.get(f'/api/rooms/{room.id}/')
+        self.assertIsNone(outsider_res.data['discord_invite_url'])

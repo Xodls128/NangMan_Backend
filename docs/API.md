@@ -233,8 +233,34 @@ refresh 블랙리스트 등록.
 | play_time_slot | O | `dawn`(00~06), `morning`(06~12), `afternoon`(12~18), `evening`(18~24) |
 | description | | |
 | max_members | | 2~12, 기본 5 |
+| discord_invite_url | | 선택. `https://discord.gg/...` 또는 `https://discord.com/invite/...` |
 
 **응답 201:** `Room`
+
+`discord_invite_url`은 **방장** 또는 **approved 멤버**에게만 응답에 포함됩니다. 그 외는 `null`.
+
+---
+
+### `PATCH /api/rooms/{id}/` 🔒 (방장)
+
+방장만 호출. 현재 **디스코드 초대 링크**만 수정 가능.
+
+**요청**
+```json
+{ "discord_invite_url": "https://discord.gg/example" }
+```
+
+| 값 | 의미 |
+|----|------|
+| 유효한 https 디스코드 초대 URL | 저장 |
+| `""` / `null` | 링크 삭제 |
+| 필드 생략 | 변경 없음 |
+
+**응답 200:** `Room`
+
+**403:** 방장 아님
+
+---
 
 방 목록·상세 응답에는 선택값 `play_time_slot`과 표시 문구
 `play_time_label`(예: `저녁 (18:00~24:00)`)이 함께 포함됩니다.
@@ -431,6 +457,7 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 | owner | `{ id, username, nickname }` |
 | max_members | 2~12 |
 | status | `open` \| `closed` |
+| discord_invite_url | 방장·approved 멤버에게만 URL, 그 외 `null` |
 | approved_member_count | |
 | my_membership_status | `pending`/`approved`/`rejected`/null |
 | unread_count | 미읽음 타인 유저 메시지 수 (`GET /rooms/mine/`에서 의미 있음, 그 외 0) |

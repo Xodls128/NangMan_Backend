@@ -1,10 +1,28 @@
 from django.db.models import Count, Q
+from django.core.exceptions import ValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.serializers import PublicUserSerializer
 
+from .discord_validation import normalize_discord_invite_url
 from .models import Game, Room, RoomMembership
+
+
+def user_can_view_discord_invite(room: Room, context) -> bool:
+    request = context.get('request')
+    if not request or not request.user.is_authenticated:
+        return False
+    if room.owner_id == request.user.id:
+        return True
+    status_map = context.get('membership_status_map')
+    if status_map is not None:
+        return status_map.get(room.id) == RoomMembership.Status.APPROVED
+    return RoomMembership.objects.filter(
+        room=room,
+        user=request.user,
+        status=RoomMembership.Status.APPROVED,
+    ).exists()
 
 
 class GameSerializer(serializers.ModelSerializer):
@@ -33,6 +51,7 @@ class RoomSerializer(serializers.ModelSerializer):
     approved_member_count = serializers.SerializerMethodField()
     my_membership_status = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
+    discord_invite_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
@@ -46,6 +65,7 @@ class RoomSerializer(serializers.ModelSerializer):
             'owner',
             'max_members',
             'status',
+            'discord_invite_url',
             'approved_member_count',
             'my_membership_status',
             'unread_count',
@@ -86,6 +106,12 @@ class RoomSerializer(serializers.ModelSerializer):
             return int(obj._unread_count or 0)
         return 0
 
+    @extend_schema_field(serializers.URLField(allow_null=True))
+    def get_discord_invite_url(self, obj):
+        if not user_can_view_discord_invite(obj, self.context):
+            return None
+        return obj.discord_invite_url or None
+
 
 class RoomCreateSerializer(serializers.ModelSerializer):
     play_time_slot = serializers.ChoiceField(
@@ -106,6 +132,12 @@ class RoomCreateSerializer(serializers.ModelSerializer):
             'invalid': '게임 슬러그가 올바르지 않습니다.',
         },
     )
+    discord_invite_url = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        max_length=512,
+    )
 
     class Meta:
         model = Room
@@ -115,7 +147,14 @@ class RoomCreateSerializer(serializers.ModelSerializer):
             'game',
             'play_time_slot',
             'max_members',
+            'discord_invite_url',
         )
+
+    def validate_discord_invite_url(self, value):
+        try:
+            return normalize_discord_invite_url(value)
+        except ValidationError as exc:
+            raise serializers.ValidationError(exc.messages[0]) from exc
 
     def validate_max_members(self, value):
         if value > Room.MAX_MEMBERS_LIMIT:
@@ -131,6 +170,31 @@ class RoomCreateSerializer(serializers.ModelSerializer):
             owner=self.context['request'].user,
             **validated_data,
         )
+
+
+class RoomUpdateSerializer(serializers.ModelSerializer):
+    discord_invite_url = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        max_length=512,
+    )
+
+    class Meta:
+        model = Room
+        fields = ('discord_invite_url',)
+
+    def validate_discord_invite_url(self, value):
+        try:
+            return normalize_discord_invite_url(value)
+        except ValidationError as exc:
+            raise serializers.ValidationError(exc.messages[0]) from exc
+
+    def update(self, instance, validated_data):
+        if 'discord_invite_url' in validated_data:
+            instance.discord_invite_url = validated_data['discord_invite_url']
+            instance.save(update_fields=['discord_invite_url', 'updated_at'])
+        return instance
 
 
 class RoomMembershipSerializer(serializers.ModelSerializer):

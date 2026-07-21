@@ -21,6 +21,7 @@ from .serializers import (
     RoomReadResponseSerializer,
     RoomReadSerializer,
     RoomSerializer,
+    RoomUpdateSerializer,
     rooms_with_counts,
 )
 from apps.chats.broadcast import (
@@ -96,10 +97,26 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
             '- 생성과 동시에 방장은 `approved` 멤버로 등록됩니다.\n'
             '- `game`: 게임 슬러그 (`GET /api/games/` 참고)\n'
             '- `play_time_slot`: dawn / morning / afternoon / evening 중 하나\n'
-            '- `max_members`: 2~12, 기본 5'
+            '- `max_members`: 2~12, 기본 5\n'
+            '- `discord_invite_url`: 선택. https 디스코드 초대 링크'
         ),
         request=RoomCreateSerializer,
         responses={201: RoomSerializer},
+    ),
+    partial_update=extend_schema(
+        tags=['rooms'],
+        summary='방 정보 수정 (방장)',
+        description=(
+            '방장만 호출할 수 있습니다. 현재는 **디스코드 초대 링크**만 수정 가능합니다.\n\n'
+            '- `discord_invite_url` 생략: 변경 없음\n'
+            '- 빈 문자열/`null`: 링크 삭제\n'
+            '- 승인된 멤버만 `GET` 응답에서 링크를 볼 수 있습니다.'
+        ),
+        request=RoomUpdateSerializer,
+        responses={
+            200: RoomSerializer,
+            403: OpenApiResponse(description='방장이 아님'),
+        },
     ),
     mine=extend_schema(
         tags=['rooms'],
@@ -236,12 +253,12 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
 )
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_permissions(self):
         if self.action == 'list':
             return [AllowAny()]
-        if self.action == 'destroy':
+        if self.action in ('destroy', 'partial_update', 'update'):
             return [IsAuthenticated(), IsRoomOwner()]
         return [IsAuthenticated()]
 
@@ -256,6 +273,8 @@ class RoomViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return RoomCreateSerializer
+        if self.action in ('partial_update', 'update'):
+            return RoomUpdateSerializer
         return RoomSerializer
 
     def get_serializer_context(self):
@@ -302,6 +321,15 @@ class RoomViewSet(viewsets.ModelViewSet):
             },
         )
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        room = self.get_object()
+        serializer = self.get_serializer(room, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        room = rooms_with_counts().get(pk=room.pk)
+        output = RoomSerializer(room, context=self.get_serializer_context())
+        return Response(output.data)
 
     @action(detail=False, methods=['get'])
     def mine(self, request):
