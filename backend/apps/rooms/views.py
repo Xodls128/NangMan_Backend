@@ -18,6 +18,8 @@ from .serializers import (
     GameSerializer,
     RoomCreateSerializer,
     RoomMembershipSerializer,
+    RoomReadResponseSerializer,
+    RoomReadSerializer,
     RoomSerializer,
     rooms_with_counts,
 )
@@ -25,6 +27,12 @@ from apps.chats.broadcast import (
     broadcast_room_deleted,
     notify_member_joined,
     notify_member_left,
+)
+from apps.chats.unread import (
+    advance_last_read,
+    annotate_unread_counts,
+    init_last_read_on_join,
+    unread_count_for_membership,
 )
 
 
@@ -98,9 +106,59 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
         summary='내가 속한 방 목록',
         description=(
             '내가 **승인(approved)** 된 방만 조회합니다.\n\n'
-            '- 방장으로 만든 방과, 가입 수락된 방이 포함됩니다.'
+            '방장으로 만든 방과, 가입 수락된 방이 포함됩니다.\n\n'
+            '## 미읽음 뱃지 (`unread_count`)\n\n'
+            '각 방에 `unread_count`가 포함됩니다. '
+            '카카오톡처럼 방 목록에 빨간 뱃지를 표시할 때 이 값을 사용하세요.\n\n'
+            '- **의미:** 내가 아직 읽지 않은 **다른 사람의 유저 메시지** 개수\n'
+            '- **제외:** 내 메시지, 시스템 메시지(`message_type=system`)\n'
+            '- **표시:** `unread_count > 0`일 때만 뱃지 표시, `0`이면 숨김\n'
+            '- **참고:** `GET /api/rooms/`(전체 목록)·상세 등에서는 `unread_count`가 항상 `0`입니다. '
+            '뱃지는 이 `mine` 응답만 사용하세요.\n\n'
+            '## 권장 클라이언트 흐름\n\n'
+            '1. 방 목록 화면 진입/새로고침 → `GET /api/rooms/mine/` → `unread_count`로 뱃지 렌더\n'
+            '2. 채팅방 탭 → `GET /api/rooms/{id}/messages/` '
+            '(조회 시 읽음 커서 자동 갱신 → 뱃지 소멸)\n'
+            '3. 목록으로 돌아와 `mine`을 다시 호출하면 해당 방 `unread_count`는 `0`\n\n'
+            '메시지 목록을 조회하지 않고 읽음만 처리하려면 '
+            '`POST /api/rooms/{id}/read/`를 사용하세요. (아래 read API 참고)'
         ),
         responses={200: RoomSerializer(many=True)},
+    ),
+    read=extend_schema(
+        tags=['rooms'],
+        summary='방 메시지 읽음 처리 (명시적)',
+        description=(
+            '해당 방의 읽음 커서(`last_read_message_id`)를 **명시적으로** 갱신합니다.\n\n'
+            '**승인(approved) 멤버만** 호출할 수 있습니다.\n\n'
+            '## `GET .../messages/` 자동 읽음과의 차이\n\n'
+            '| API | 역할 |\n'
+            '|-----|------|\n'
+            '| `GET /api/rooms/{id}/messages/` | 채팅방을 **열어서 메시지를 보는** 기본 경로. '
+            '조회 성공 시 커서가 최신 메시지로 자동 갱신됩니다. |\n'
+            '| `POST /api/rooms/{id}/read/` (이 API) | 메시지 목록을 조회하지 **않고** '
+            '커서만 앞으로 옮길 때 사용합니다. |\n\n'
+            '일반 채팅방 입장에서는 `messages`만 호출하면 충분합니다. '
+            '둘 다 호출해도 커서는 **단조 증가**라서 안전합니다.\n\n'
+            '## 이 API를 쓰면 좋은 경우\n\n'
+            '- WebSocket으로만 새 메시지를 받고, `messages` 목록 API는 호출하지 않을 때\n'
+            '- 앱이 백그라운드/포그라운드 전환 시 “여기까지 읽음”만 동기화할 때\n'
+            '- 화면 focus 시 뱃지를 바로 지우고 싶을 때\n'
+            '- 특정 메시지 ID까지 읽음으로 맞추고 싶을 때 (`last_read_message_id` 지정)\n\n'
+            '## 요청\n\n'
+            '- body 생략 또는 `last_read_message_id` 생략 → 방의 **최신 메시지 ID**로 설정 '
+            '(해당 방 전체를 읽음 처리)\n'
+            '- `last_read_message_id` 지정 → 그 ID까지 읽음. '
+            '현재 커서보다 **작으면 무시**(뒤로 가지 않음)\n\n'
+            '## 응답\n\n'
+            '`room_id`, 갱신된 `last_read_message_id`, 갱신 후 `unread_count` '
+            '(보통 `0`)를 반환합니다. 클라이언트는 이 값으로 로컬 뱃지를 즉시 갱신할 수 있습니다.'
+        ),
+        request=RoomReadSerializer,
+        responses={
+            200: RoomReadResponseSerializer,
+            403: OpenApiResponse(description='승인된 방 멤버가 아님'),
+        },
     ),
     apply=extend_schema(
         tags=['rooms'],
@@ -220,7 +278,7 @@ class RoomViewSet(viewsets.ModelViewSet):
                 )
                 .values_list('id', flat=True)
             )
-        elif self.action in ('retrieve', 'members', 'applications', 'apply', 'leave'):
+        elif self.action in ('retrieve', 'members', 'applications', 'apply', 'leave', 'read'):
             room_ids = [self.kwargs['pk']]
 
         if room_ids:
@@ -251,6 +309,7 @@ class RoomViewSet(viewsets.ModelViewSet):
             memberships__user=request.user,
             memberships__status=RoomMembership.Status.APPROVED,
         ).distinct()
+        qs = annotate_unread_counts(qs, request.user)
         page = self.paginate_queryset(qs)
         context = self.get_serializer_context()
         if page is not None:
@@ -258,6 +317,38 @@ class RoomViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = RoomSerializer(qs, many=True, context=context)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def read(self, request, pk=None):
+        room = self.get_object()
+        membership = RoomMembership.objects.filter(
+            room=room,
+            user=request.user,
+            status=RoomMembership.Status.APPROVED,
+        ).first()
+        if membership is None:
+            raise PermissionDenied('승인된 방 멤버만 읽음 처리할 수 있습니다.')
+
+        serializer = RoomReadSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+        message_id = serializer.validated_data.get('last_read_message_id')
+
+        membership = advance_last_read(
+            room_id=room.id,
+            user=request.user,
+            message_id=message_id,
+        )
+        return Response(
+            {
+                'room_id': room.id,
+                'last_read_message_id': membership.last_read_message_id,
+                'unread_count': unread_count_for_membership(
+                    room_id=room.id,
+                    user_id=request.user.id,
+                    last_read_message_id=membership.last_read_message_id,
+                ),
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def apply(self, request, pk=None):
@@ -405,6 +496,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
         with transaction.atomic():
             membership.status = RoomMembership.Status.APPROVED
             membership.save(update_fields=['status', 'updated_at'])
+            init_last_read_on_join(membership)
             if room.approved_member_count >= room.max_members:
                 room.status = Room.Status.CLOSED
                 room.save(update_fields=['status', 'updated_at'])

@@ -36,6 +36,7 @@ class RoomSerializer(serializers.ModelSerializer):
     )
     approved_member_count = serializers.SerializerMethodField()
     my_membership_status = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
@@ -51,6 +52,7 @@ class RoomSerializer(serializers.ModelSerializer):
             'status',
             'approved_member_count',
             'my_membership_status',
+            'unread_count',
             'created_at',
             'updated_at',
         )
@@ -72,6 +74,21 @@ class RoomSerializer(serializers.ModelSerializer):
             return None
         membership = obj.memberships.filter(user=request.user).only('status').first()
         return membership.status if membership else None
+
+    @extend_schema_field(
+        serializers.IntegerField(
+            help_text=(
+                '미읽음 타인 유저 메시지 수. '
+                'GET /rooms/mine/ 에서만 의미 있음(그 외 0). '
+                '0이면 뱃지 숨김.'
+            ),
+        )
+    )
+    def get_unread_count(self, obj):
+        """mine에서 annotate된 값. 그 외 list/retrieve 등은 0."""
+        if hasattr(obj, '_unread_count'):
+            return int(obj._unread_count or 0)
+        return 0
 
 
 class RoomCreateSerializer(serializers.ModelSerializer):
@@ -135,6 +152,29 @@ class RoomMembershipSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = fields
+
+
+class RoomReadSerializer(serializers.Serializer):
+    last_read_message_id = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        help_text=(
+            '이 메시지 ID까지 읽음 처리. '
+            '생략 시 방의 최신 메시지 ID로 설정(방 전체 읽음). '
+            '현재 커서보다 작으면 무시됩니다.'
+        ),
+    )
+
+
+class RoomReadResponseSerializer(serializers.Serializer):
+    room_id = serializers.IntegerField(help_text='읽음 처리한 방 ID')
+    last_read_message_id = serializers.IntegerField(
+        allow_null=True,
+        help_text='갱신된 읽음 커서. 메시지가 없으면 null',
+    )
+    unread_count = serializers.IntegerField(
+        help_text='갱신 후 미읽음 개수(보통 0). 로컬 뱃지 즉시 반영에 사용',
+    )
 
 
 def rooms_with_counts():

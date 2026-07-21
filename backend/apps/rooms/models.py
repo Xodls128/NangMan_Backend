@@ -96,11 +96,14 @@ class Room(models.Model):
     def create_with_owner(cls, *, owner, **kwargs):
         """방 생성과 동시에 방장을 approved 멤버로 등록."""
         room = cls.objects.create(owner=owner, **kwargs)
-        RoomMembership.objects.create(
+        membership = RoomMembership.objects.create(
             room=room,
             user=owner,
             status=RoomMembership.Status.APPROVED,
         )
+        from apps.chats.unread import init_last_read_on_join
+
+        init_last_read_on_join(membership)
         return room
 
 
@@ -127,6 +130,13 @@ class RoomMembership(models.Model):
         max_length=20,
         choices=Status.choices,
         default=Status.PENDING,
+    )
+    last_read_message_id = models.PositiveBigIntegerField(
+        '마지막 읽은 메시지 ID',
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='이 ID 이하의 메시지는 읽음. null은 0과 동일하게 취급.',
     )
     created_at = models.DateTimeField('신청일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)

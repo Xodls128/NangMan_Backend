@@ -9,6 +9,7 @@ from .broadcast import broadcast_chat_message, serialize_message
 from .models import ChatMessage
 from .permissions import IsApprovedRoomMemberFromURL
 from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
+from .unread import advance_last_read
 
 
 @extend_schema_view(
@@ -19,7 +20,21 @@ from .serializers import ChatMessageCreateSerializer, ChatMessageSerializer
             '방의 채팅 메시지를 시간순으로 조회합니다.\n\n'
             '- **승인(approved) 멤버만** 접근 가능\n'
             '- `after_id`를 주면 해당 ID보다 큰 메시지만 반환 (폴링/증분 조회용)\n'
-            '- 실시간 수신은 WebSocket `ws://.../ws/rooms/{room_id}/?token=...` 사용'
+            '- 실시간 수신은 WebSocket `ws://.../ws/rooms/{room_id}/?token=...` 사용\n\n'
+            '## 읽음 처리 (자동)\n\n'
+            '조회가 **성공하면** 호출한 유저의 읽음 커서가 해당 방의 '
+            '**최신 메시지 ID**로 자동 갱신됩니다.\n\n'
+            '채팅방을 열어서 메시지를 본다 = 읽었다는 카카오톡식 UX입니다. '
+            '별도로 `POST /api/rooms/{id}/read/`를 호출할 필요가 **없습니다**.\n\n'
+            '## 권장 사용\n\n'
+            '| 상황 | 호출 |\n'
+            '|------|------|\n'
+            '| 채팅방 입장(기본) | 이 API (`GET .../messages/`)만 호출 → 뱃지 자동 소멸 |\n'
+            '| 방 목록 뱃지 표시 | `GET /api/rooms/mine/`의 `unread_count` |\n'
+            '| 메시지 조회 없이 읽음만 | `POST /api/rooms/{id}/read/` |\n\n'
+            '`after_id`로 증분 조회해도 커서는 방 **전체 최신** 기준으로 앞으로 갑니다. '
+            '(방에 들어와 메시지를 보고 있는 상태로 간주)\n\n'
+            '이 API와 `POST .../read/`를 함께 써도 커서는 단조 증가라 중복 호출이 안전합니다.'
         ),
         parameters=[
             OpenApiParameter(
@@ -84,6 +99,11 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
         context = super().get_serializer_context()
         context['room'] = self.get_room()
         return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        advance_last_read(room_id=self.kwargs['room_id'], user=request.user)
+        return response
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

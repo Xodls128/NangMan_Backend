@@ -224,6 +224,43 @@ refresh 블랙리스트 등록.
 
 내가 **approved**인 방 목록.
 
+각 방에 `unread_count`(내가 안 읽은 **타인 유저 메시지** 수)가 포함됩니다.
+`0`이면 뱃지를 숨기면 됩니다. 본인 메시지·시스템 메시지는 카운트하지 않습니다.
+전체 방 목록(`GET /api/rooms/`)의 `unread_count`는 항상 `0`이므로, 뱃지는 **이 API만** 사용하세요.
+
+**권장 흐름:** 목록 화면 → `mine`으로 뱃지 표시 → 채팅방 입장 시 `GET .../messages/`(자동 읽음) → 다시 `mine`이면 해당 방 `0`.
+
+---
+
+### `POST /api/rooms/{id}/read/` 🔒
+
+해당 방의 읽음 커서를 **명시적으로** 갱신합니다. **approved 멤버만** 가능.
+
+| 구분 | 역할 |
+|------|------|
+| `GET .../messages/` | 채팅방 입장(메시지 조회) 시 **자동** 읽음 — 기본 경로 |
+| `POST .../read/` | 메시지 목록을 조회하지 **않고** 커서만 갱신 — 보조 |
+
+**쓰면 좋은 경우:** WS만 수신 중일 때, 포그라운드 전환 시 동기화, focus 시 뱃지 제거, 특정 ID까지 읽음 맞춤.
+
+**요청** (body 선택)
+```json
+{ "last_read_message_id": 123 }
+```
+
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| last_read_message_id | | 생략 시 방의 최신 메시지 ID. 현재 커서보다 작으면 무시(단조 증가) |
+
+**응답 200**
+```json
+{ "room_id": 1, "last_read_message_id": 123, "unread_count": 0 }
+```
+
+**403:** 승인된 멤버 아님
+
+일반 채팅방 입장에서는 `messages`만으로 충분합니다. `read`와 함께 써도 안전합니다.
+
 ---
 
 ### `GET /api/rooms/{id}/` 🔒
@@ -285,6 +322,10 @@ pending → rejected. 재신청 불가.
 | Query | 설명 |
 |-------|------|
 | `after_id` | 해당 ID보다 큰 메시지만 (증분 조회) |
+
+조회 성공 시 해당 유저의 읽음 커서가 방의 **최신 메시지 ID**로 자동 갱신됩니다.
+채팅방 입장의 기본 읽음 경로이며, 별도 `POST .../read/`는 필요 없습니다.
+`after_id` 폴링이어도 커서는 방 전체 최신 기준으로 전진합니다.
 
 **응답 200:** `ChatMessage[]`
 
@@ -370,6 +411,7 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 | status | `open` \| `closed` |
 | approved_member_count | |
 | my_membership_status | `pending`/`approved`/`rejected`/null |
+| unread_count | 미읽음 타인 유저 메시지 수 (`GET /rooms/mine/`에서 의미 있음, 그 외 0) |
 | created_at, updated_at | |
 
 ### RoomMembership
