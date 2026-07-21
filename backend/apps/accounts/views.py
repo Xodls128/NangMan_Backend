@@ -14,6 +14,7 @@ from .kakao import KakaoAPIError, build_authorize_url, exchange_code_for_token, 
 from .serializers import (
     AuthModeSerializer,
     KakaoLoginSerializer,
+    MeUpdateSerializer,
     MvpAuthResponseSerializer,
     MvpLoginSerializer,
     TokenPairSerializer,
@@ -118,6 +119,35 @@ class MeView(APIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
+    @extend_schema(
+        tags=['auth'],
+        summary='내 프로필 수정',
+        description=(
+            '현재 로그인 유저의 프로필을 수정합니다.\n\n'
+            '- **닉네임은 변경할 수 없습니다.**\n'
+            '- `profile_avatar`만 아바타 ID(`01`~`10`) 중 선택 가능합니다.\n'
+            '- 이미지 파일은 프론트 정적 자산(`/avatars/{id}.svg`)과 매핑합니다.'
+        ),
+        request=MeUpdateSerializer,
+        responses={
+            200: UserSerializer,
+            400: OpenApiResponse(description='잘못된 아바타 ID'),
+            401: OpenApiResponse(description='인증 필요'),
+        },
+    )
+    def patch(self, request):
+        serializer = MeUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data:
+            return Response(
+                {'detail': '변경할 항목이 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        user.profile_avatar = serializer.validated_data['profile_avatar']
+        user.save(update_fields=['profile_avatar', 'updated_at'])
+        return Response(UserSerializer(user).data)
+
 
 class AuthModeView(APIView):
     """프론트 로그인 UI가 따를 인증 모드."""
@@ -180,7 +210,7 @@ class MvpLoginView(APIView):
             serializer.validated_data['nickname'],
             serializer.validated_data['password'],
         )
-        payload = tokens_for_user(user)
+        payload = tokens_for_user(user, request=request)
         payload['created'] = created
         if created:
             payload['message'] = '회원가입이 완료되었고 로그인되었습니다.'
@@ -264,4 +294,4 @@ class KakaoLoginView(APIView):
                 http_status = status.HTTP_502_BAD_GATEWAY
             return Response({'detail': str(exc)}, status=http_status)
 
-        return Response(tokens_for_user(user))
+        return Response(tokens_for_user(user, request=request))

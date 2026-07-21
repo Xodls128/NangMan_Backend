@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserMa
 from django.db import models
 from django.db.models.functions import Lower
 
+from .profile_avatars import DEFAULT_PROFILE_AVATAR, PROFILE_AVATAR_IDS
+
 
 class UserManager(DjangoUserManager):
     def create_superuser(self, username, email=None, password=None, **extra_fields):
@@ -29,6 +31,12 @@ class User(AbstractUser):
         help_text='카카오 user id 등. 로컬 계정은 local_<username> 형식.',
     )
     nickname = models.CharField('닉네임', max_length=50, blank=True)
+    profile_avatar = models.CharField(
+        '프로필 아바타',
+        max_length=2,
+        choices=[(v, v) for v in PROFILE_AVATAR_IDS],
+        default=DEFAULT_PROFILE_AVATAR,
+    )
     created_at = models.DateTimeField('가입일', auto_now_add=True)
     updated_at = models.DateTimeField('수정일', auto_now=True)
 

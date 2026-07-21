@@ -157,7 +157,24 @@ refresh 블랙리스트 등록.
 
 현재 유저 정보.
 
-**응답 200:** `User` 객체
+**응답 200:** `User` 객체 (`profile_avatar` 포함, `01`~`10`)
+
+프로필 이미지는 API URL이 아니라 **프론트 정적 파일**과 매핑합니다. 예: `profile_avatar`가 `"05"`이면 웹 클라이언트는 `/avatars/05.svg`를 사용합니다.
+
+---
+
+### `PATCH /api/auth/me/` 🔒
+
+내 프로필 수정. **닉네임은 변경 불가**, `profile_avatar`만 수정합니다.
+
+**요청**
+```json
+{ "profile_avatar": "05" }
+```
+
+| `profile_avatar` | 아바타 ID (`01` ~ `10`) |
+
+**응답 200:** 갱신된 `User`
 
 ---
 

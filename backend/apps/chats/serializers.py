@@ -1,16 +1,12 @@
 from rest_framework import serializers
 
+from apps.accounts.serializers import PublicUserSerializer
+
 from .models import ChatMessage
 
 
-class SenderSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    username = serializers.CharField()
-    nickname = serializers.CharField()
-
-
 class ChatMessageSerializer(serializers.ModelSerializer):
-    sender = SenderSerializer(read_only=True, allow_null=True)
+    sender = PublicUserSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = ChatMessage

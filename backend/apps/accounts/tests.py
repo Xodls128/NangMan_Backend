@@ -150,6 +150,46 @@ class MvpLoginApiTests(TestCase):
         self.assertIn('password', res.data)
 
 
+class ProfileAvatarApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='avatar_user',
+            password='StrongPass123!',
+            nickname='아바타유저',
+            provider=User.Provider.LOCAL,
+            provider_uid='local_avatar_user',
+        )
+
+    def test_me_includes_profile_avatar(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/auth/me/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['profile_avatar'], '01')
+        self.assertNotIn('profile_avatar_url', res.data)
+
+    def test_patch_profile_avatar(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.patch(
+            '/api/auth/me/',
+            {'profile_avatar': '05'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['profile_avatar'], '05')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile_avatar, '05')
+
+    def test_patch_invalid_avatar(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.patch(
+            '/api/auth/me/',
+            {'profile_avatar': '99'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
 class MvpLoginConcurrencyTests(TransactionTestCase):
     @override_settings(MVP_TEST=True)
     def test_concurrent_register_does_not_create_duplicates(self):

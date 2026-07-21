@@ -2,13 +2,9 @@ from django.db.models import Count, Q
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.accounts.serializers import PublicUserSerializer
+
 from .models import Game, Room, RoomMembership
-
-
-class OwnerSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    username = serializers.CharField()
-    nickname = serializers.CharField()
 
 
 class GameSerializer(serializers.ModelSerializer):
@@ -27,7 +23,7 @@ class GameSerializer(serializers.ModelSerializer):
 
 
 class RoomSerializer(serializers.ModelSerializer):
-    owner = OwnerSerializer(read_only=True)
+    owner = PublicUserSerializer(read_only=True)
     game = GameSerializer(read_only=True)
     play_time_label = serializers.CharField(
         source='get_play_time_slot_display',
@@ -138,7 +134,7 @@ class RoomCreateSerializer(serializers.ModelSerializer):
 
 
 class RoomMembershipSerializer(serializers.ModelSerializer):
-    user = OwnerSerializer(read_only=True)
+    user = PublicUserSerializer(read_only=True)
     room_id = serializers.IntegerField(source='room.id', read_only=True)
 
     class Meta:

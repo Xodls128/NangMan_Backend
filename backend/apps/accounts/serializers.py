@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
+from .profile_avatars import PROFILE_AVATAR_IDS
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -14,9 +15,26 @@ class UserSerializer(serializers.ModelSerializer):
             'email',
             'provider',
             'provider_uid',
+            'profile_avatar',
             'created_at',
         )
         read_only_fields = fields
+
+
+class MeUpdateSerializer(serializers.Serializer):
+    profile_avatar = serializers.ChoiceField(
+        choices=[(v, v) for v in PROFILE_AVATAR_IDS],
+        required=True,
+    )
+
+
+class PublicUserSerializer(serializers.Serializer):
+    """방·채팅 등에 노출되는 유저 요약."""
+
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    nickname = serializers.CharField()
+    profile_avatar = serializers.CharField()
 
 
 class KakaoLoginSerializer(serializers.Serializer):
@@ -59,7 +77,7 @@ class AuthModeSerializer(serializers.Serializer):
     )
 
 
-def tokens_for_user(user: User) -> dict:
+def tokens_for_user(user: User, request=None) -> dict:
     refresh = RefreshToken.for_user(user)
     return {
         'access': str(refresh.access_token),
