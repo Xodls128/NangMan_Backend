@@ -184,8 +184,8 @@ class MvpLoginView(APIView):
         summary='MVP 통합 가입/로그인',
         description=(
             '`MVP_TEST=true`일 때만 사용할 수 있습니다.\n\n'
-            '- 닉네임이 없으면 회원가입 후 JWT 발급\n'
-            '- 닉네임이 있으면 비밀번호로 로그인\n'
+            '- 닉네임이 없으면 회원가입 후 JWT 발급 (`profile_avatar`로 프로필 사진 지정)\n'
+            '- 닉네임이 있으면 비밀번호로만 로그인 (`profile_avatar`는 무시)\n'
             '- 닉네임은 대소문자를 구분하지 않고 고유해야 합니다\n'
             '- 비밀번호가 틀리면 '
             '`해당 닉네임이 이미 존재하며 비밀번호가 다릅니다.` 메시지를 반환합니다'
@@ -209,6 +209,7 @@ class MvpLoginView(APIView):
         user, created = mvp_login_or_register(
             serializer.validated_data['nickname'],
             serializer.validated_data['password'],
+            profile_avatar=serializer.validated_data.get('profile_avatar'),
         )
         payload = tokens_for_user(user, request=request)
         payload['created'] = created

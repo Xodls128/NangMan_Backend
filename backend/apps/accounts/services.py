@@ -6,6 +6,7 @@ from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from .kakao import KakaoProfile
 from .models import User
+from .profile_avatars import DEFAULT_PROFILE_AVATAR, is_valid_profile_avatar
 
 
 @transaction.atomic
@@ -39,9 +40,14 @@ def find_user_by_nickname(nickname: str) -> User | None:
 
 
 @transaction.atomic
-def mvp_login_or_register(nickname: str, password: str) -> tuple[User, bool]:
+def mvp_login_or_register(
+    nickname: str,
+    password: str,
+    profile_avatar: str | None = None,
+) -> tuple[User, bool]:
     """
     닉네임이 없으면 가입 후 로그인, 있으면 비밀번호로 로그인합니다.
+    profile_avatar는 신규 가입 시에만 반영하며, 기존 계정 로그인 시에는 무시합니다.
 
     Returns:
         (user, created)
@@ -63,6 +69,10 @@ def mvp_login_or_register(nickname: str, password: str) -> tuple[User, bool]:
             raise AuthenticationFailed('비활성화된 계정입니다.')
         return user, False
 
+    avatar = profile_avatar or DEFAULT_PROFILE_AVATAR
+    if not is_valid_profile_avatar(avatar):
+        raise ValidationError({'profile_avatar': '올바른 프로필 아바타 ID를 선택해 주세요.'})
+
     try:
         validate_password(password, user=User(username=nickname, nickname=nickname))
     except DjangoValidationError as exc:
@@ -76,6 +86,7 @@ def mvp_login_or_register(nickname: str, password: str) -> tuple[User, bool]:
                 nickname=nickname,
                 provider=User.Provider.LOCAL,
                 provider_uid=f'local_{nickname}',
+                profile_avatar=avatar,
             )
     except IntegrityError:
         # 동시 가입 등으로 닉네임이 방금 생성된 경우 → 로그인 시도로 전환

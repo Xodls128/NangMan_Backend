@@ -140,6 +140,45 @@ class MvpLoginApiTests(TestCase):
         self.assertFalse(res.data['created'])
 
     @override_settings(MVP_TEST=True)
+    def test_register_with_profile_avatar(self):
+        create = self.client.post(
+            '/api/auth/mvp/',
+            {
+                'nickname': 'AvatarHero',
+                'password': 'StrongPass123!',
+                'profile_avatar': '07',
+            },
+            format='json',
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create.data['user']['profile_avatar'], '07')
+        user = User.objects.get(username='AvatarHero')
+        self.assertEqual(user.profile_avatar, '07')
+
+    @override_settings(MVP_TEST=True)
+    def test_login_ignores_profile_avatar(self):
+        User.objects.create_user(
+            username='KeepAvatar',
+            password='StrongPass123!',
+            nickname='KeepAvatar',
+            provider=User.Provider.LOCAL,
+            provider_uid='local_KeepAvatar',
+            profile_avatar='03',
+        )
+        res = self.client.post(
+            '/api/auth/mvp/',
+            {
+                'nickname': 'KeepAvatar',
+                'password': 'StrongPass123!',
+                'profile_avatar': '09',
+            },
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.data['created'])
+        self.assertEqual(res.data['user']['profile_avatar'], '03')
+
+    @override_settings(MVP_TEST=True)
     def test_password_validation_on_register(self):
         res = self.client.post(
             '/api/auth/mvp/',
