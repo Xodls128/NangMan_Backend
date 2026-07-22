@@ -164,7 +164,7 @@ refresh 블랙리스트 등록.
 
 **응답 200:** `User` 객체 (`profile_avatar` 포함, `01`~`10`)
 
-프로필 이미지는 API URL이 아니라 **프론트 정적 파일**과 매핑합니다. 예: `profile_avatar`가 `"05"`이면 웹 클라이언트는 `/avatars/05.svg`를 사용합니다.
+프로필 이미지는 API가 URL을 주지 않고 **아바타 ID(`01`~`10`)만** 반환합니다. 실제 이미지 표시는 클라이언트가 ID로 매핑합니다.
 
 ---
 
@@ -375,7 +375,8 @@ pending → rejected. 재신청 불가.
 채팅방 입장의 기본 읽음 경로이며, 별도 `POST .../read/`는 필요 없습니다.
 `after_id` 폴링이어도 커서는 방 전체 최신 기준으로 전진합니다.
 
-**응답 200:** `ChatMessage[]`
+**응답 200:** `ChatMessage[]`  
+각 메시지의 `sender`에 `profile_avatar`(`01`~`10`)가 포함됩니다. 메시지에 아바타 필드를 따로 두지 않고, 보낸 사람 요약에 넣습니다.
 
 ---
 
@@ -416,7 +417,12 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
   "message": {
     "id": 1,
     "room": 2,
-    "sender": { "id": 1, "username": "...", "nickname": "..." },
+    "sender": {
+      "id": 1,
+      "username": "...",
+      "nickname": "...",
+      "profile_avatar": "05"
+    },
     "message_type": "user",
     "content": "안녕",
     "created_at": "2026-07-18T04:19:00+09:00"
@@ -424,7 +430,8 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 }
 ```
 
-`message_type`: `user` | `system` (입장 안내 등)
+`message_type`: `user` | `system` (입장 안내 등)  
+`sender.profile_avatar`: 아바타 ID (`01`~`10`). 이미지 URL이 아니라 ID만 전달하며, 표시는 클라이언트가 매핑합니다.
 
 ---
 
@@ -439,7 +446,18 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 | email | string | |
 | provider | `kakao` \| `local` | |
 | provider_uid | string | 카카오 id 등 |
+| profile_avatar | string (`01`~`10`) | 프로필 아바타 ID (이미지 URL 아님) |
 | created_at | datetime | |
+
+### PublicUser (Owner / sender / membership.user)
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | int | |
+| username | string | |
+| nickname | string | 표시 이름 |
+| profile_avatar | string (`01`~`10`) | 프로필 아바타 ID |
+
+채팅·방·멤버십 등 공개 유저 요약에 공통으로 쓰입니다. REST 메시지 목록/생성과 WebSocket `chat.message`의 `sender`가 이 형태입니다.
 
 ### Game
 | 필드 | 설명 |
@@ -454,7 +472,7 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 |------|------|
 | id, title, description | |
 | game | Game 객체 |
-| owner | `{ id, username, nickname }` |
+| owner | PublicUser |
 | max_members | 2~12 |
 | status | `open` \| `closed` |
 | discord_invite_url | 방장·approved 멤버에게만 URL, 그 외 `null` |
@@ -467,7 +485,7 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 | 필드 | 설명 |
 |------|------|
 | id, room_id | |
-| user | Owner |
+| user | PublicUser |
 | status | `pending` \| `approved` \| `rejected` |
 | created_at, updated_at | |
 
@@ -475,7 +493,7 @@ wss://api.gamemate.kr/ws/rooms/{room_id}/?token=<access_jwt>
 | 필드 | 설명 |
 |------|------|
 | id, room | |
-| sender | Owner \| null (시스템) |
+| sender | PublicUser \| null (시스템) |
 | message_type | `user` \| `system` |
 | content | max 1000 |
 | created_at | |

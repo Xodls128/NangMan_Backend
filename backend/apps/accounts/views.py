@@ -126,7 +126,7 @@ class MeView(APIView):
             '현재 로그인 유저의 프로필을 수정합니다.\n\n'
             '- **닉네임은 변경할 수 없습니다.**\n'
             '- `profile_avatar`만 아바타 ID(`01`~`10`) 중 선택 가능합니다.\n'
-            '- 이미지 파일은 프론트 정적 자산(`/avatars/{id}.svg`)과 매핑합니다.'
+            '- 이미지 URL이 아니라 ID만 저장·반환합니다. 실제 이미지 표시는 클라이언트가 ID로 매핑합니다.'
         ),
         request=MeUpdateSerializer,
         responses={
