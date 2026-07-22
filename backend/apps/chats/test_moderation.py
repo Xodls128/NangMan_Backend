@@ -19,6 +19,17 @@ class NormalizeProfanityTests(SimpleTestCase):
             '금지단어xyz',
         )
 
+    def test_separated_jamo_recomposed_to_syllable(self):
+        # 자모 분리("ㅅㅣㅂㅏㄹ")와 낱자 사이 공백은 원래 음절로 복원되어야 한다.
+        self.assertEqual(normalize_for_profanity_check('ㅅㅣㅂㅏㄹ'), '시발')
+        self.assertEqual(normalize_for_profanity_check('ㅅ ㅣ ㅂ ㅏ ㄹ'), '시발')
+
+    def test_completed_syllables_are_not_corrupted(self):
+        # 완성형 음절 뒤의 낱자를 앞 음절에 잘못 붙이면 안 된다("야"+"ㅅ" != "얏").
+        self.assertNotIn('얏', normalize_for_profanity_check('야 ㅅㅂ'))
+        # 정상 어절의 음절 경계는 보존되어 오검열이 없어야 한다.
+        self.assertEqual(normalize_for_profanity_check('시 바람'), '시바람')
+
 
 @override_settings(CHAT_PROFANITY_FILTER_ENABLED=True)
 class ProfanityFilterDbTests(TestCase):
@@ -63,6 +74,41 @@ class ProfanityFilterDbTests(TestCase):
 
         with self.assertRaises(ValidationError):
             ProfanityTerm.objects.create(term='금 지 단어xyz')
+
+
+@override_settings(CHAT_PROFANITY_FILTER_ENABLED=True)
+class ProfanityEvasionTests(TestCase):
+    """자모 분리 / 초성체 우회 및 오검열 방지 회귀 테스트."""
+
+    def setUp(self):
+        clear_profanity_wordlist_cache()
+        # 시드 마이그레이션이 이미 등록했을 수 있으므로 get_or_create로 보장.
+        for term in ('시발', 'ㅅㅂ', '병신', 'ㅂㅅ', '개새끼'):
+            obj, _ = ProfanityTerm.objects.get_or_create(term=term)
+            if not obj.is_active:
+                obj.is_active = True
+                obj.save()
+        clear_profanity_wordlist_cache()
+
+    def tearDown(self):
+        clear_profanity_wordlist_cache()
+
+    def test_detects_separated_jamo(self):
+        self.assertTrue(contains_profanity('ㅅㅣㅂㅏㄹ'))
+        self.assertTrue(contains_profanity('ㅅ ㅣ ㅂ ㅏ ㄹ'))
+
+    def test_detects_chosung_abbreviation(self):
+        self.assertTrue(contains_profanity('야 ㅅㅂ 뭐하냐'))
+        self.assertTrue(contains_profanity('ㅂㅅ같네'))
+
+    def test_detects_spaced_word(self):
+        self.assertTrue(contains_profanity('개 새 끼'))
+
+    def test_no_false_positive_on_normal_sentences(self):
+        # 음절 경계가 보존되어 정상 어절이 검열되면 안 된다.
+        for clean in ('시 바람이 분다', '시원한 발라드', '소방서 갔다옴',
+                      '신발 사러 가자', 'ㅋㅋㅋ 재밌다', 'class 수업 끝'):
+            self.assertFalse(contains_profanity(clean), msg=clean)
 
 
 def _create_user(**kwargs):
