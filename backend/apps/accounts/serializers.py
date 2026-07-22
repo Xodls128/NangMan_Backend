@@ -55,7 +55,7 @@ class MvpLoginSerializer(serializers.Serializer):
     profile_avatar = serializers.ChoiceField(
         choices=[(v, v) for v in PROFILE_AVATAR_IDS],
         required=False,
-        help_text='신규 가입 시에만 적용 (`01`~`10`). 기존 닉네임 로그인 시 무시됩니다.',
+        help_text='신규 가입 시에만 적용 (`01`~`10`). 생략 시 무작위. 기존 닉네임 로그인 시 무시됩니다.',
     )
 
 

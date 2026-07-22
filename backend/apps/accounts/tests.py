@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -138,6 +139,19 @@ class MvpLoginApiTests(TestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertFalse(res.data['created'])
+
+    @override_settings(MVP_TEST=True)
+    @patch('apps.accounts.services.random_profile_avatar', return_value='08')
+    def test_register_without_profile_avatar_uses_random(self, _mock_random):
+        create = self.client.post(
+            '/api/auth/mvp/',
+            {'nickname': 'RandomAvatar', 'password': 'StrongPass123!'},
+            format='json',
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create.data['user']['profile_avatar'], '08')
+        user = User.objects.get(username='RandomAvatar')
+        self.assertEqual(user.profile_avatar, '08')
 
     @override_settings(MVP_TEST=True)
     def test_register_with_profile_avatar(self):

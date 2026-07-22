@@ -6,7 +6,7 @@ from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from .kakao import KakaoProfile
 from .models import User
-from .profile_avatars import DEFAULT_PROFILE_AVATAR, is_valid_profile_avatar
+from .profile_avatars import is_valid_profile_avatar, random_profile_avatar
 
 
 @transaction.atomic
@@ -19,6 +19,7 @@ def upsert_kakao_user(profile: KakaoProfile) -> User:
         defaults={
             'username': username,
             'nickname': profile.nickname,
+            'profile_avatar': random_profile_avatar(),
         },
     )
     if created:
@@ -69,7 +70,7 @@ def mvp_login_or_register(
             raise AuthenticationFailed('비활성화된 계정입니다.')
         return user, False
 
-    avatar = profile_avatar or DEFAULT_PROFILE_AVATAR
+    avatar = profile_avatar or random_profile_avatar()
     if not is_valid_profile_avatar(avatar):
         raise ValidationError({'profile_avatar': '올바른 프로필 아바타 ID를 선택해 주세요.'})
 
