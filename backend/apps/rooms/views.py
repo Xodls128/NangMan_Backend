@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import (
@@ -35,6 +36,51 @@ from apps.chats.unread import (
     init_last_read_on_join,
     unread_count_for_membership,
 )
+
+
+def _mvp_test_enabled() -> bool:
+    return bool(getattr(settings, 'MVP_TEST', False))
+
+
+def _approve_membership(membership: RoomMembership) -> RoomMembership:
+    """멤버십을 approved로 확정하고 입장 부가 처리(읽음 커서, 정원 마감, 시스템 알림)."""
+    if membership.status != RoomMembership.Status.PENDING:
+        raise ValidationError('대기 중인 신청만 수락할 수 있습니다.')
+
+    room = membership.room
+    if room.approved_member_count >= room.max_members:
+        raise ValidationError('정원에 도달한 방입니다.')
+
+    with transaction.atomic():
+        membership.status = RoomMembership.Status.APPROVED
+        membership.save(update_fields=['status', 'updated_at'])
+        init_last_read_on_join(membership)
+        if room.approved_member_count >= room.max_members:
+            room.status = Room.Status.CLOSED
+            room.save(update_fields=['status', 'updated_at'])
+
+    notify_member_joined(room=room, user=membership.user)
+    return membership
+
+
+def _instant_join_membership(*, room: Room, user) -> RoomMembership:
+    """MVP 모드: 신청과 동시에 approved 멤버로 등록."""
+    if room.approved_member_count >= room.max_members:
+        raise ValidationError('정원에 도달한 방입니다.')
+
+    with transaction.atomic():
+        membership = RoomMembership.objects.create(
+            room=room,
+            user=user,
+            status=RoomMembership.Status.APPROVED,
+        )
+        init_last_read_on_join(membership)
+        if room.approved_member_count >= room.max_members:
+            room.status = Room.Status.CLOSED
+            room.save(update_fields=['status', 'updated_at'])
+
+    notify_member_joined(room=room, user=user)
+    return membership
 
 
 @extend_schema_view(
@@ -181,7 +227,9 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
         tags=['rooms'],
         summary='방 가입 신청',
         description=(
-            '모집 중인 방에 가입을 신청합니다. 상태는 `pending`입니다.\n\n'
+            '모집 중인 방에 가입을 신청합니다.\n\n'
+            '- **`MVP_TEST=true`:** 즉시 `approved` 되며 채팅 멤버로 입장합니다.\n'
+            '- **그 외:** 상태는 `pending`이며 방장 수락이 필요합니다.\n\n'
             '제한:\n'
             '- 방장 본인은 신청 불가\n'
             '- `closed` 방 또는 정원 초과 시 불가\n'
@@ -391,11 +439,14 @@ class RoomViewSet(viewsets.ModelViewSet):
         if room.approved_member_count >= room.max_members:
             raise ValidationError('정원에 도달한 방입니다.')
 
-        membership = RoomMembership.objects.create(
-            room=room,
-            user=request.user,
-            status=RoomMembership.Status.PENDING,
-        )
+        if _mvp_test_enabled():
+            membership = _instant_join_membership(room=room, user=request.user)
+        else:
+            membership = RoomMembership.objects.create(
+                room=room,
+                user=request.user,
+                status=RoomMembership.Status.PENDING,
+            )
         return Response(
             RoomMembershipSerializer(membership).data,
             status=status.HTTP_201_CREATED,
@@ -513,23 +564,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         membership = self.get_object()
-
-        if membership.status != RoomMembership.Status.PENDING:
-            raise ValidationError('대기 중인 신청만 수락할 수 있습니다.')
-
-        room = membership.room
-        if room.approved_member_count >= room.max_members:
-            raise ValidationError('정원에 도달한 방입니다.')
-
-        with transaction.atomic():
-            membership.status = RoomMembership.Status.APPROVED
-            membership.save(update_fields=['status', 'updated_at'])
-            init_last_read_on_join(membership)
-            if room.approved_member_count >= room.max_members:
-                room.status = Room.Status.CLOSED
-                room.save(update_fields=['status', 'updated_at'])
-
-        notify_member_joined(room=room, user=membership.user)
+        membership = _approve_membership(membership)
         return Response(RoomMembershipSerializer(membership).data)
 
     @action(detail=True, methods=['post'])

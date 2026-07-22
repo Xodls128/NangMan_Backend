@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -59,6 +59,7 @@ class RoomLeaveDeleteTests(TestCase):
             status=RoomMembership.Status.APPROVED,
         )
 
+    @override_settings(MVP_TEST=False)
     def test_member_can_leave_and_reapply(self):
         self.client.force_authenticate(self.member)
         response = self.client.post(f'/api/rooms/{self.room.id}/leave/')
@@ -110,6 +111,62 @@ class RoomLeaveDeleteTests(TestCase):
         response = self.client.delete(f'/api/rooms/{self.room.id}/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Room.objects.filter(pk=self.room.id).exists())
+
+
+class MvpInstantRoomJoinTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.game = Game.objects.create(
+            slug='test-game-mvp-join',
+            name='Test Game MVP Join',
+            name_ko='테스트',
+            short_name='MJ',
+            color='#112233',
+        )
+        self.owner = _create_user(
+            username='mvp_join_owner',
+            nickname='방장',
+            provider_uid='local_mvp_join_owner',
+        )
+        self.applicant = _create_user(
+            username='mvp_join_applicant',
+            nickname='신청자',
+            provider_uid='local_mvp_join_applicant',
+        )
+        self.room = Room.create_with_owner(
+            owner=self.owner,
+            title='MVP 즉시 입장 테스트',
+            game=self.game,
+            max_members=5,
+            play_time_slot=Room.PlayTimeSlot.EVENING,
+        )
+
+    @override_settings(MVP_TEST=True)
+    def test_apply_is_immediately_approved(self):
+        self.client.force_authenticate(self.applicant)
+        response = self.client.post(f'/api/rooms/{self.room.id}/apply/')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['status'], RoomMembership.Status.APPROVED)
+
+        membership = RoomMembership.objects.get(room=self.room, user=self.applicant)
+        self.assertEqual(membership.status, RoomMembership.Status.APPROVED)
+        self.assertIsNotNone(membership.last_read_message_id)
+
+    @override_settings(MVP_TEST=True)
+    def test_approved_member_can_list_messages(self):
+        self.client.force_authenticate(self.applicant)
+        apply_response = self.client.post(f'/api/rooms/{self.room.id}/apply/')
+        self.assertEqual(apply_response.status_code, status.HTTP_201_CREATED)
+
+        messages_response = self.client.get(f'/api/rooms/{self.room.id}/messages/')
+        self.assertEqual(messages_response.status_code, status.HTTP_200_OK)
+
+    @override_settings(MVP_TEST=False)
+    def test_apply_stays_pending_when_mvp_disabled(self):
+        self.client.force_authenticate(self.applicant)
+        response = self.client.post(f'/api/rooms/{self.room.id}/apply/')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['status'], RoomMembership.Status.PENDING)
 
 
 class RoomPlayTimeSlotTests(TestCase):
