@@ -57,6 +57,7 @@ from .unread import advance_last_read
             'REST로 메시지를 저장합니다. 연결된 WebSocket 구독자에게도 브로드캐스트됩니다.\n\n'
             '- **승인 멤버만** 가능\n'
             '- content는 공백 불가, 최대 1000자\n'
+            '- 욕설·비속어 등 금지 표현은 서버에서 차단됩니다.\n'
             '- 일반적인 실시간 전송은 WebSocket을 권장합니다.'
         ),
         request=ChatMessageCreateSerializer,

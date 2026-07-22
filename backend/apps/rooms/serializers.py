@@ -242,5 +242,6 @@ def rooms_with_counts():
         _approved_count=Count(
             'memberships',
             filter=Q(memberships__status=RoomMembership.Status.APPROVED),
+            distinct=True,
         )
     )

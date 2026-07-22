@@ -5,6 +5,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from apps.rooms.models import RoomMembership
 
+from .content_validation import validate_user_chat_content
 from .models import ChatMessage
 from .serializers import ChatMessageSerializer
 
@@ -88,11 +89,9 @@ class RoomChatConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _create_message(self, room_id, user_id, content):
-        text = (content or '').strip()
-        if not text:
-            return None, '메시지 내용을 입력하세요.'
-        if len(text) > ChatMessage.MAX_CONTENT_LENGTH:
-            return None, f'메시지는 {ChatMessage.MAX_CONTENT_LENGTH}자까지 가능합니다.'
+        text, error = validate_user_chat_content(content)
+        if error:
+            return None, error
 
         # 연결 이후 멤버십이 바뀌었을 수 있어 재확인
         if not RoomMembership.objects.filter(

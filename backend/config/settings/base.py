@@ -157,3 +157,14 @@ KAKAO_REDIRECT_URI = os.getenv(
     'KAKAO_REDIRECT_URI',
     'http://localhost:5173/auth/kakao/callback',
 )
+
+# 채팅 욕설 검열 (기본 활성). 금지어는 Django Admin / ProfanityTerm DB로 관리.
+# 텍스트 파일은 초기 시드·`seed_profanity_terms` 커맨드용입니다.
+CHAT_PROFANITY_FILTER_ENABLED = os.getenv(
+    'CHAT_PROFANITY_FILTER_ENABLED',
+    'true',
+).strip().lower() in ('1', 'true', 'yes', 'on')
+CHAT_PROFANITY_WORDLIST_PATH = os.getenv(
+    'CHAT_PROFANITY_WORDLIST_PATH',
+    str(BASE_DIR / 'apps' / 'chats' / 'moderation' / 'wordlists' / 'ko_profanity.txt'),
+)

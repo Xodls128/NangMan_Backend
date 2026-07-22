@@ -3,6 +3,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.chats.models import ChatMessage
+
 from .models import Game, Room, RoomMembership
 
 User = get_user_model()
@@ -330,3 +332,63 @@ class RoomDiscordInviteTests(TestCase):
         self.client.force_authenticate(self.outsider)
         outsider_res = self.client.get(f'/api/rooms/{room.id}/')
         self.assertIsNone(outsider_res.data['discord_invite_url'])
+
+
+class ApprovedMemberCountTests(TestCase):
+    """`mine` 엔드포인트에서 approved_member_count가 채팅 메시지 수에 의해
+    부풀려지지 않는지 검증(Count JOIN fan-out 회귀 방지)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.game = Game.objects.create(
+            slug='test-game-count',
+            name='Test Game Count',
+            name_ko='카운트',
+            short_name='CT',
+            color='#112233',
+        )
+        self.owner = _create_user(
+            username='count_owner',
+            nickname='카운트방장',
+            provider_uid='local_count_owner',
+        )
+        self.member = _create_user(
+            username='count_member',
+            nickname='카운트멤버',
+            provider_uid='local_count_member',
+        )
+        self.room = Room.create_with_owner(
+            owner=self.owner,
+            title='카운트 테스트 방',
+            game=self.game,
+            max_members=5,
+            play_time_slot=Room.PlayTimeSlot.EVENING,
+        )
+        # 방장 + 멤버 = 승인 멤버 2명
+        RoomMembership.objects.create(
+            room=self.room,
+            user=self.member,
+            status=RoomMembership.Status.APPROVED,
+        )
+
+    def _mine_room(self):
+        response = self.client.get('/api/rooms/mine/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        results = data['results'] if isinstance(data, dict) and 'results' in data else data
+        by_id = {r['id']: r for r in results}
+        return by_id[self.room.id]
+
+    def test_count_stable_regardless_of_message_volume(self):
+        self.client.force_authenticate(self.owner)
+        # 메시지가 없을 때 정확히 2명
+        self.assertEqual(self._mine_room()['approved_member_count'], 2)
+
+        # 채팅 메시지를 여러 개 추가해도 값이 곱해지면 안 됨
+        for _ in range(5):
+            ChatMessage.objects.create(
+                room=self.room,
+                sender=self.member,
+                content='hello',
+            )
+        self.assertEqual(self._mine_room()['approved_member_count'], 2)

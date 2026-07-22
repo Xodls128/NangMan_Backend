@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import PublicUserSerializer
 
+from .content_validation import validate_user_chat_content
 from .models import ChatMessage
 
 
@@ -27,13 +28,9 @@ class ChatMessageCreateSerializer(serializers.ModelSerializer):
         fields = ('content',)
 
     def validate_content(self, value):
-        text = value.strip()
-        if not text:
-            raise serializers.ValidationError('메시지 내용을 입력하세요.')
-        if len(text) > ChatMessage.MAX_CONTENT_LENGTH:
-            raise serializers.ValidationError(
-                f'메시지는 {ChatMessage.MAX_CONTENT_LENGTH}자까지 가능합니다.'
-            )
+        text, error = validate_user_chat_content(value)
+        if error:
+            raise serializers.ValidationError(error)
         return text
 
     def create(self, validated_data):
